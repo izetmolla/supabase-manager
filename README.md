@@ -38,6 +38,10 @@ curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/scr
 # update to the latest image (data and projects are kept)
 curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s update
 
+# install again, asking every setting (address, port, Proxy Manager, projects folder, image tag,
+# timezone, user, HTTPS); choose to keep the data or start fresh (RESET=1 starts fresh)
+curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s reinstall
+
 # remove the container (PURGE=1 also deletes the data volume)
 curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s uninstall
 ```

@@ -3,6 +3,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash
 #   curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s update
+#   curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s reinstall
 #   curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s uninstall
 #
 # Settings (environment variables, saved to $CONFIG_DIR/install.env and reused by `update`):
@@ -20,7 +21,8 @@
 # `install` asks for the listen address, port and Proxy Manager settings when run from a
 # terminal (Enter keeps the default shown in brackets). Settings given as environment variables
 # are not asked; NONINTERACTIVE=1 skips every question. `configure` asks again on an existing
-# install and re-creates the container.
+# install and re-creates the container. `reinstall` repeats the whole install, asks every
+# setting, and can start from an empty manager database (RESET=1).
 #
 # Everything lives inside main(), so a partially downloaded script never runs.
 
@@ -39,6 +41,7 @@ main() {
 	install) install_manager ;;
 	update | upgrade) update_manager ;;
 	configure | reconfigure) configure_manager ;;
+	reinstall) reinstall_manager ;;
 	uninstall | remove) uninstall_manager ;;
 	-h | --help | help) usage ;;
 	*)
@@ -50,11 +53,14 @@ main() {
 
 usage() {
 	cat <<EOF
-Usage: install.sh [install|update|configure|uninstall]
+Usage: install.sh [install|update|configure|reinstall|uninstall]
 
   install    Install Docker if needed, then pull and start Supabase Manager (default)
   update     Pull the latest image and re-create the container (data is kept)
   configure  Ask for the listen address, port and Proxy Manager again, then re-create the container
+  reinstall  Run the full install again and ask every setting (address, port, Proxy Manager,
+             projects folder, image tag, timezone, user, HTTPS); choose to keep the data or
+             start fresh (RESET=1 starts fresh without asking)
   uninstall  Remove the container (PURGE=1 also deletes the data volume and $CONFIG_DIR)
 EOF
 }
@@ -103,11 +109,12 @@ OS_ID="" OS_LIKE="" OS_NAME="" PKG_MANAGER="" PKG_INDEX_UPDATED=0
 
 detect_os() {
 	if [ -r /etc/os-release ]; then
+		# Read in a subshell: os-release defines VERSION, NAME, ID... which must not leak into
+		# this script's own settings (VERSION is the manager image tag).
+		local info
 		# shellcheck disable=SC1091
-		. /etc/os-release
-		OS_ID="${ID:-}"
-		OS_LIKE="${ID_LIKE:-}"
-		OS_NAME="${PRETTY_NAME:-${NAME:-$OS_ID}}"
+		info="$(. /etc/os-release && printf '%s\n%s\n%s\n' "${ID:-}" "${ID_LIKE:-}" "${PRETTY_NAME:-${NAME:-${ID:-}}}")"
+		{ IFS= read -r OS_ID; IFS= read -r OS_LIKE; IFS= read -r OS_NAME; } <<<"$info" || true
 	fi
 	OS_ID="$(printf '%s' "$OS_ID" | tr '[:upper:]' '[:lower:]')"
 	OS_LIKE="$(printf '%s' "$OS_LIKE" | tr '[:upper:]' '[:lower:]')"
@@ -327,6 +334,23 @@ container_running() {
 
 # ---- configuration -----------------------------------------------------------------------------
 
+CONFIG_KEYS=" ADDR PROJECTS_ROOT VERSION PUID PGID TZ SECURE_COOKIES PROXY_MANAGER_ENABLE PROXY_MANAGER_KIND PROXY_HTTP_PORT PROXY_HTTPS_PORT "
+
+# read_config_file FILE: loads known KEY=value lines without executing the file, so a damaged
+# file cannot break (or run code in) the installer. Surrounding quotes are removed.
+read_config_file() {
+	local line key value
+	while IFS= read -r line || [ -n "$line" ]; do
+		[[ "$line" =~ ^[[:space:]]*([A-Z_]+)=(.*)$ ]] || continue
+		key="${BASH_REMATCH[1]}" value="${BASH_REMATCH[2]}"
+		case "$CONFIG_KEYS" in *" $key "*) ;; *) continue ;; esac
+		if [[ "$value" =~ ^\'(.*)\'$ ]] || [[ "$value" =~ ^\"(.*)\"$ ]]; then
+			value="${BASH_REMATCH[1]}"
+		fi
+		printf -v "$key" '%s' "$value"
+	done <"$1"
+}
+
 # Environment variables win over the saved file, which wins over the defaults.
 load_config() {
 	local env_addr="${ADDR:-}" env_root="${PROJECTS_ROOT:-}" env_version="${VERSION:-}"
@@ -336,14 +360,17 @@ load_config() {
 	# Remembered so the interactive setup does not ask what the environment already decided.
 	FROM_ENV=" ${env_addr:+ADDR} ${env_pm:+PROXY_MANAGER_ENABLE} ${env_kind:+PROXY_MANAGER_KIND} ${env_http:+PROXY_HTTP_PORT} ${env_https:+PROXY_HTTPS_PORT} "
 
-	if [ -f "$CONFIG_FILE" ]; then
-		# shellcheck disable=SC1090
-		. "$CONFIG_FILE"
-	fi
+	ADDR="" PROJECTS_ROOT="" VERSION="" PUID="" PGID="" TZ="" SECURE_COOKIES=""
+	PROXY_MANAGER_ENABLE="" PROXY_MANAGER_KIND="" PROXY_HTTP_PORT="" PROXY_HTTPS_PORT=""
+	[ -f "$CONFIG_FILE" ] && read_config_file "$CONFIG_FILE"
 
 	ADDR="${env_addr:-${ADDR:-127.0.0.1:8080}}"
 	PROJECTS_ROOT="${env_root:-${PROJECTS_ROOT:-/etc/supabase-manager/projects}}"
 	VERSION="${env_version:-${VERSION:-latest}}"
+	if ! [[ "$VERSION" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+		warn "ignoring invalid VERSION '$VERSION' (not an image tag), using latest"
+		VERSION=latest
+	fi
 	PUID="${env_puid:-${PUID:-1000}}"
 	PGID="${env_pgid:-${PGID:-1000}}"
 	TZ="${env_tz:-${TZ:-UTC}}"
@@ -503,6 +530,74 @@ configure_interactive() {
 	echo >/dev/tty
 }
 
+# configure_advanced: the remaining settings, asked by `reinstall` only.
+configure_advanced() {
+	can_prompt || return 0
+	printf '%sAdvanced%s (press Enter to keep the value in brackets)\n\n' "$BOLD" "$NC" >/dev/tty
+	local answer
+	while :; do
+		ask answer "Projects folder" "$PROJECTS_ROOT"
+		[[ "$answer" == /* ]] && break
+		warn "enter an absolute path such as /etc/supabase-manager/projects"
+	done
+	PROJECTS_ROOT="${answer%/}"
+	while :; do
+		ask answer "Image tag (latest or a version such as 1.4.0)" "$VERSION"
+		[[ "$answer" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] && break
+		warn "enter a Docker image tag"
+	done
+	VERSION="$answer"
+	IMAGE="$IMAGE_REPO:$VERSION"
+	ask TZ "Timezone" "$TZ"
+	while :; do
+		ask PUID "User ID the manager runs as" "$PUID"
+		ask PGID "Group ID the manager runs as" "$PGID"
+		[[ "$PUID" =~ ^[0-9]+$ && "$PGID" =~ ^[0-9]+$ ]] && break
+		warn "user and group IDs must be numbers"
+	done
+	local yn_def=n
+	[ "$SECURE_COOKIES" = "true" ] && yn_def=y
+	ask_yes_no SECURE_COOKIES "Is the panel served over HTTPS (secure cookies)?" "$yn_def"
+	echo >/dev/tty
+}
+
+# ask_reset: sets RESET=1 when the user chooses to start from an empty manager database.
+ask_reset() {
+	[ "${RESET:-0}" = "1" ] && return 0
+	can_prompt || return 0
+	local choice
+	ask_choice choice "Keep the existing manager data?" 1 \
+		"Keep - accounts, projects list, settings and proxy configuration stay" \
+		"Start fresh - delete the manager database and begin with the first-admin setup"
+	if [ "$choice" = "2" ]; then
+		local confirm
+		ask confirm "  Type 'delete' to confirm" ""
+		if [ "$confirm" = "delete" ]; then
+			RESET=1
+		else
+			warn "not confirmed; keeping the existing data"
+		fi
+	fi
+	echo >/dev/tty
+}
+
+# reset_data [OLD_PROJECTS_ROOT]: removes the manager container, its proxy containers and the data volume. Project
+# folders and Supabase project containers are left alone.
+reset_data() {
+	info "Deleting the manager data (volume $DATA_VOLUME)"
+	container_exists && docker rm -f "$CONTAINER_NAME" >/dev/null
+	local proxies
+	proxies="$(docker ps -aq --filter "name=^sm-proxy-" || true)"
+	if [ -n "$proxies" ]; then
+		# shellcheck disable=SC2086
+		docker rm -f $proxies >/dev/null
+		ok "Proxy containers removed"
+	fi
+	docker volume rm "$DATA_VOLUME" >/dev/null 2>&1 || true
+	ok "Manager data deleted"
+	warn "project folders in ${1:-$PROJECTS_ROOT} and running Supabase project containers were kept"
+}
+
 # warn_proxy_ports: the proxy instance is created on first start; busy ports only make its first
 # deploy fail, so this warns instead of stopping the install.
 warn_proxy_ports() {
@@ -517,20 +612,13 @@ warn_proxy_ports() {
 
 save_config() {
 	mkdir -p "$CONFIG_DIR"
-	cat >"$CONFIG_FILE" <<EOF
-# Supabase Manager install settings, used by: install.sh update
-ADDR=$ADDR
-PROJECTS_ROOT=$PROJECTS_ROOT
-VERSION=$VERSION
-PUID=$PUID
-PGID=$PGID
-TZ=$TZ
-SECURE_COOKIES=$SECURE_COOKIES
-PROXY_MANAGER_ENABLE=$PROXY_MANAGER_ENABLE
-PROXY_MANAGER_KIND=$PROXY_MANAGER_KIND
-PROXY_HTTP_PORT=$PROXY_HTTP_PORT
-PROXY_HTTPS_PORT=$PROXY_HTTPS_PORT
-EOF
+	local key
+	{
+		echo "# Supabase Manager install settings, used by: install.sh update"
+		for key in $CONFIG_KEYS; do
+			printf "%s='%s'\n" "$key" "${!key//\'/}"
+		done
+	} >"$CONFIG_FILE"
 	chmod 0600 "$CONFIG_FILE"
 	ok "Settings saved to $CONFIG_FILE"
 }
@@ -699,6 +787,41 @@ configure_manager() {
 	prepare_storage
 	start_container
 	wait_healthy
+	print_done
+}
+
+# reinstall_manager: the full install again, asking every setting (saved values are the defaults),
+# optionally from an empty manager database.
+reinstall_manager() {
+	check_root
+	check_os
+	check_not_container
+	detect_os
+	install_prerequisites
+	install_docker
+	load_config
+	local old_addr="$ADDR" old_root="$PROJECTS_ROOT"
+	configure_interactive
+	configure_advanced
+	ask_reset
+	if [ "${RESET:-0}" = "1" ]; then
+		reset_data "$old_root"
+	elif [ "$PROXY_MANAGER_ENABLE" = "true" ] && docker ps -aq --filter "name=^sm-proxy-" | grep -q .; then
+		warn "proxy instances already exist; their ports are changed in Proxy Manager > Instances, not here"
+	fi
+	if [ "${ADDR##*:}" != "${old_addr##*:}" ] || [ "${RESET:-0}" = "1" ]; then
+		check_port
+	fi
+	if [ "$PROJECTS_ROOT" != "$old_root" ] && [ "${RESET:-0}" != "1" ]; then
+		warn "projects already created stay in $old_root; move them by hand if needed"
+	fi
+	warn_proxy_ports
+	save_config
+	pull_image
+	prepare_storage
+	start_container
+	wait_healthy
+	docker image prune -f --filter "label=org.opencontainers.image.title=supabase-manager" >/dev/null 2>&1 || true
 	print_done
 }
 
