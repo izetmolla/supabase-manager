@@ -365,7 +365,7 @@ export function ProjectsPage() {
             </span>
             {isAdmin && (
               <Button size="xs" variant="outline" asChild>
-                <Link to="/settings/system">{system.supabase_cli ? 'Update' : 'Install'} Supabase CLI</Link>
+                <Link to="/settings/system/cli">{system.supabase_cli ? 'Update' : 'Install'} Supabase CLI</Link>
               </Button>
             )}
           </AlertDescription>

@@ -196,7 +196,7 @@ export interface ManagerUpdateInfo {
   supported: boolean
   unsupported?: string
   container?: string
-  update: { running: boolean; version: string; phase: string; error?: string }
+  update: { running: boolean; version: string; commit?: string; phase: string; error?: string }
 }
 
 export interface CLIInfo {

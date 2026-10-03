@@ -56,7 +56,7 @@ function DisabledNotice() {
           Turn it on in System settings to run nginx or Traefik proxies for your domains. Configuration you created before is kept.
         </p>
         <Button asChild className="mt-4">
-          <Link to="/settings/system">Open System settings</Link>
+          <Link to="/settings/system/proxy-manager">Open System settings</Link>
         </Button>
       </div>
     </PageContainer>

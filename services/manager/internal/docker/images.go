@@ -21,6 +21,7 @@ type ImageInfo struct {
 	ID string
 	// RepoDigests are the registry digests ("repo@sha256:...") the image was pulled as.
 	RepoDigests []string
+	Labels      map[string]string
 }
 
 // InspectImage returns ErrNotFound when ref is not present on this host.
@@ -33,11 +34,14 @@ func (c *Client) InspectImage(ctx context.Context, ref string) (ImageInfo, error
 	var raw struct {
 		ID          string   `json:"Id"`
 		RepoDigests []string `json:"RepoDigests"`
+		Config      struct {
+			Labels map[string]string `json:"Labels"`
+		} `json:"Config"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return ImageInfo{}, err
 	}
-	return ImageInfo{ID: raw.ID, RepoDigests: raw.RepoDigests}, nil
+	return ImageInfo{ID: raw.ID, RepoDigests: raw.RepoDigests, Labels: raw.Config.Labels}, nil
 }
 
 // LocalTags lists the tags of repo (e.g. "izetmolla/supabase-manager-proxy-nginx") pulled or

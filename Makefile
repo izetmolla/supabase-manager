@@ -99,7 +99,7 @@ help:
 	@echo "  make release-patch|minor|major        Bump, tag, build + push the image, push the git tag"
 	@echo "  make release next                     update, fix, tidy, vet, lint, commit, then release-patch"
 	@echo "  make release V=1.4.0                  Same with an explicit version"
-	@echo "  make deploy-all                       Build and push every image (+ proxy images) at the current version, no new tag"
+	@echo "  make deploy-all                       Build and push every image (+ proxy images) at the current version and as :latest, no new tag"
 	@echo "  make deploy-all next                  update, fix, fmt, tidy, proto, vet, lint, tests, build, integration tests,"
 	@echo "                                        commit, then release-patch every service (images + proxy images to Docker Hub)"
 	@echo "  make deploy-all V=1.4.0               Same with an explicit version (SKIP_INTEGRATION=1 skips the Docker tests)"

@@ -3,7 +3,7 @@
 # sm-proxy-agent). They carry the manager's version, which the manager uses as its default tag.
 #
 #   ./script/docker-proxy-images.sh build      build :$VERSION and :$DOCKER_TAG locally
-#   ./script/docker-proxy-images.sh publish    build and push both tags
+#   ./script/docker-proxy-images.sh publish    build and push both tags, plus :latest (PUSH_LATEST=0 skips it)
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -36,5 +36,11 @@ for kind in nginx traefik; do
 		echo "Pushing ${image} and ${version_image}"
 		docker push "$image"
 		docker push "$version_image"
+		latest_image="$(proxy_image "$kind" latest)"
+		if [[ "${PUSH_LATEST:-1}" == "1" && "$latest_image" != "$image" && "$latest_image" != "$version_image" ]]; then
+			docker tag "$version_image" "$latest_image"
+			echo "Pushing ${latest_image}"
+			docker push "$latest_image"
+		fi
 	fi
 done

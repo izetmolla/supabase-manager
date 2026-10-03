@@ -38,11 +38,17 @@ var (
 	containerIDRe = regexp.MustCompile(`/containers/([0-9a-f]{64})/`)
 )
 
+// LatestTag makes Apply pull and run whatever image is tagged latest on Docker Hub, release or
+// not (e.g. a build pushed by `make deploy-all`).
+const LatestTag = "latest"
+
 type State struct {
 	Running bool   `json:"running"`
 	Version string `json:"version"`
-	Phase   string `json:"phase"`
-	Error   string `json:"error,omitempty"`
+	// Commit is the revision of the image being started, known once it is pulled.
+	Commit string `json:"commit,omitempty"`
+	Phase  string `json:"phase"`
+	Error  string `json:"error,omitempty"`
 }
 
 type Info struct {
@@ -220,7 +226,7 @@ func (u *Updater) Apply(ctx context.Context, version string) error {
 		}
 		version = v
 	}
-	if !releaseRe.MatchString(version) {
+	if version != LatestTag && !releaseRe.MatchString(version) {
 		return fmt.Errorf("invalid version %q", version)
 	}
 	self, err := u.supported(ctx)
@@ -250,11 +256,19 @@ func (u *Updater) Apply(ctx context.Context, version string) error {
 	return nil
 }
 
-func (u *Updater) apply(ctx context.Context, self docker.ContainerDetails, version string) error {
-	if err := u.dc.PullImage(ctx, u.repo, version); err != nil {
+func (u *Updater) apply(ctx context.Context, self docker.ContainerDetails, tag string) error {
+	if err := u.dc.PullImage(ctx, u.repo, tag); err != nil {
 		return err
 	}
-	image := u.repo + ":" + version
+	image := u.repo + ":" + tag
+	if img, err := u.dc.InspectImage(ctx, image); err == nil {
+		u.mu.Lock()
+		if v := img.Labels["org.opencontainers.image.version"]; v != "" {
+			u.state.Version = v
+		}
+		u.state.Commit = img.Labels["org.opencontainers.image.revision"]
+		u.mu.Unlock()
+	}
 
 	u.setPhase("restarting")
 	log.Printf("self-update: replacing container %s with %s", self.Name, image)

@@ -25,6 +25,13 @@ docker push "$image"
 echo "Pushing ${version_image}"
 docker push "$version_image"
 
+latest_image="$(docker_image_name "$service" latest)"
+if [[ "${PUSH_LATEST:-1}" == "1" && "$latest_image" != "$image" && "$latest_image" != "$version_image" ]]; then
+	docker tag "$version_image" "$latest_image"
+	echo "Pushing ${latest_image}"
+	docker push "$latest_image"
+fi
+
 echo "Published ${image} and ${version_image}"
 
 # The manager starts proxy containers from images with its own version tag.

@@ -3,7 +3,7 @@ import { AppLayout, ProductLayout, ProjectLayout, RequireAdmin, RequireAuth } fr
 import { LoginPage, SetupPage } from '@/pages/auth-pages'
 import { ProjectsPage } from '@/pages/projects'
 import { UsersPage } from '@/pages/users'
-import { SystemPage } from '@/pages/system'
+import { SystemSettingsRoutes } from '@/pages/system'
 import { OverviewPage } from '@/pages/project/overview'
 import { ProvidersPage } from '@/pages/project/auth-providers'
 import { AuthUrlPage, AuthSettingsPage } from '@/pages/project/auth-settings'
@@ -47,10 +47,10 @@ export default function App() {
           }
         />
         <Route
-          path="/settings/system"
+          path="/settings/system/*"
           element={
             <RequireAdmin>
-              <SystemPage />
+              <SystemSettingsRoutes />
             </RequireAdmin>
           }
         />
