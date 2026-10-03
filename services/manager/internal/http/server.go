@@ -67,6 +67,8 @@ func (s *Server) App(ui fs.FS) *fiber.App {
 		return c.JSON(fiber.Map{"version": version.Version, "commit": version.CommitSHA})
 	})
 
+	api.Post("/cli/proxy/panel-host", s.requireCLI, s.cliPanelHost)
+
 	a := api.Group("/auth")
 	a.Get("/setup", s.setupStatus)
 	a.Post("/setup", s.setup)

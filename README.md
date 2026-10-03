@@ -47,8 +47,19 @@ curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/scr
 ```
 
 Other options: `VERSION` (image tag), `PUID` / `PGID`, `TZ`, `SECURE_COOKIES`,
-`PROXY_MANAGER_ENABLE`, `PROXY_MANAGER_KIND`, `PROXY_HTTP_PORT`, `PROXY_HTTPS_PORT`. The Proxy
-Manager choice applies on the first start only; afterwards it is managed in the panel.
+`PROXY_MANAGER_ENABLE`, `PROXY_MANAGER_KIND`, `PROXY_HTTP_PORT`, `PROXY_HTTPS_PORT`,
+`PANEL_DOMAIN`, `PANEL_EMAIL`. The Proxy Manager choice applies on the first start only;
+afterwards it is managed in the panel.
+
+With the Proxy Manager enabled, the last question is how to reach the panel: on a domain (HTTPS
+with Let's Encrypt when you give an email), on the server's public IP over HTTP, or not through
+the proxy. The installer creates the proxy host with the manager CLI, which you can also run
+yourself at any time:
+
+```bash
+docker exec supabase-manager supabase-manager proxy panel-host manager.example.com --email you@example.com
+docker exec supabase-manager supabase-manager proxy panel-host 203.0.113.7          # public IP, HTTP
+```
 
 Running more than one Supabase project on a server usually means juggling `supabase start` in
 several folders, port clashes, hand-edited `config.toml` files and a Studio per project. Supabase

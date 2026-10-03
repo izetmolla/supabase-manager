@@ -34,6 +34,11 @@ const usage = `Usage:
                                                      Set a user's password (prompts if not piped)
   supabase-manager user set-email <id|email> <new-email>
                                                      Change a user's email (login name)
+  supabase-manager proxy panel-host <domain|ip> [--email <email>] [--no-tls]
+                                                     Serve this panel through the Proxy Manager on
+                                                     <domain> (HTTPS via Let's Encrypt when an
+                                                     instance has an HTTPS port); needs the running
+                                                     server, e.g. docker exec supabase-manager ...
   supabase-manager healthcheck                       Exit 0 if the local server is healthy
 `
 
@@ -48,6 +53,8 @@ func runCLI(args []string) bool {
 		err = userCmd(args[1:])
 	case "healthcheck":
 		err = healthcheck()
+	case "proxy":
+		err = proxyCmd(args[1:])
 	case "self-update-apply":
 		err = selfUpdateApply(args[1:])
 	case "help", "-h", "--help":
@@ -90,21 +97,30 @@ func selfUpdateApply(args []string) error {
 	return nil
 }
 
-// healthcheck probes the local /api/health endpoint; used by the container HEALTHCHECK.
-func healthcheck() error {
+// localURL is the base URL of the server running in this container.
+func localURL() (string, error) {
 	addr := os.Getenv("ADDR")
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
 		host = "127.0.0.1"
 	}
+	return "http://" + net.JoinHostPort(host, port), nil
+}
+
+// healthcheck probes the local /api/health endpoint; used by the container HEALTHCHECK.
+func healthcheck() error {
+	base, err := localURL()
+	if err != nil {
+		return err
+	}
 	client := http.Client{Timeout: 3 * time.Second}
-	res, err := client.Get("http://" + net.JoinHostPort(host, port) + "/api/health")
+	res, err := client.Get(base + "/api/health")
 	if err != nil {
 		return err
 	}

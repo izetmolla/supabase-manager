@@ -1,7 +1,9 @@
 package config
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,11 +14,13 @@ import (
 )
 
 type Config struct {
-	Addr           string
-	DBDriver       string
-	DBDSN          string
-	JWTSecret      []byte
-	EncryptionKey  []byte
+	Addr          string
+	DBDriver      string
+	DBDSN         string
+	JWTSecret     []byte
+	EncryptionKey []byte
+	// CLIToken authenticates CLI commands that ask the running server (on loopback) to act.
+	CLIToken       string
 	ProjectsRoot   string
 	SupabaseBin    string
 	ToolsDir       string
@@ -100,6 +104,9 @@ func Load() *Config {
 		jwtSecret = "dev-insecure-jwt-secret-change-me"
 	}
 	c.JWTSecret = []byte(jwtSecret)
+	mac := hmac.New(sha256.New, c.JWTSecret)
+	mac.Write([]byte("supabase-manager-cli"))
+	c.CLIToken = hex.EncodeToString(mac.Sum(nil))
 
 	encKey := os.Getenv("ENCRYPTION_KEY")
 	if encKey == "" {

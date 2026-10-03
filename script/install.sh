@@ -17,6 +17,9 @@
 #   PROXY_MANAGER_KIND    first proxy instance: nginx or traefik (default nginx)
 #   PROXY_HTTP_PORT       its HTTP port, 0 disables (default 80)
 #   PROXY_HTTPS_PORT      its HTTPS port, 0 disables (default 443)
+#   PANEL_DOMAIN    with the Proxy Manager: serve the panel on this domain or IP ("ip" = the
+#                   public IP, "none" = not through the proxy)
+#   PANEL_EMAIL     Let's Encrypt email for HTTPS on PANEL_DOMAIN (empty: HTTP only)
 #
 # `install` asks for the listen address, port and Proxy Manager settings when run from a
 # terminal (Enter keeps the default shown in brackets). Settings given as environment variables
@@ -334,7 +337,7 @@ container_running() {
 
 # ---- configuration -----------------------------------------------------------------------------
 
-CONFIG_KEYS=" ADDR PROJECTS_ROOT VERSION PUID PGID TZ SECURE_COOKIES PROXY_MANAGER_ENABLE PROXY_MANAGER_KIND PROXY_HTTP_PORT PROXY_HTTPS_PORT "
+CONFIG_KEYS=" ADDR PROJECTS_ROOT VERSION PUID PGID TZ SECURE_COOKIES PROXY_MANAGER_ENABLE PROXY_MANAGER_KIND PROXY_HTTP_PORT PROXY_HTTPS_PORT PANEL_DOMAIN PANEL_EMAIL "
 
 # read_config_file FILE: loads known KEY=value lines without executing the file, so a damaged
 # file cannot break (or run code in) the installer. Surrounding quotes are removed.
@@ -357,11 +360,13 @@ load_config() {
 	local env_puid="${PUID:-}" env_pgid="${PGID:-}" env_tz="${TZ:-}" env_secure="${SECURE_COOKIES:-}"
 	local env_pm="${PROXY_MANAGER_ENABLE:-}" env_kind="${PROXY_MANAGER_KIND:-}"
 	local env_http="${PROXY_HTTP_PORT:-}" env_https="${PROXY_HTTPS_PORT:-}"
+	local env_domain="${PANEL_DOMAIN:-}" env_email="${PANEL_EMAIL:-}"
 	# Remembered so the interactive setup does not ask what the environment already decided.
-	FROM_ENV=" ${env_addr:+ADDR} ${env_pm:+PROXY_MANAGER_ENABLE} ${env_kind:+PROXY_MANAGER_KIND} ${env_http:+PROXY_HTTP_PORT} ${env_https:+PROXY_HTTPS_PORT} "
+	FROM_ENV=" ${env_addr:+ADDR} ${env_pm:+PROXY_MANAGER_ENABLE} ${env_kind:+PROXY_MANAGER_KIND} ${env_http:+PROXY_HTTP_PORT} ${env_https:+PROXY_HTTPS_PORT} ${env_domain:+PANEL_DOMAIN} "
 
 	ADDR="" PROJECTS_ROOT="" VERSION="" PUID="" PGID="" TZ="" SECURE_COOKIES=""
 	PROXY_MANAGER_ENABLE="" PROXY_MANAGER_KIND="" PROXY_HTTP_PORT="" PROXY_HTTPS_PORT=""
+	PANEL_DOMAIN="" PANEL_EMAIL=""
 	[ -f "$CONFIG_FILE" ] && read_config_file "$CONFIG_FILE"
 
 	ADDR="${env_addr:-${ADDR:-127.0.0.1:8080}}"
@@ -379,6 +384,9 @@ load_config() {
 	PROXY_MANAGER_KIND="${env_kind:-${PROXY_MANAGER_KIND:-nginx}}"
 	PROXY_HTTP_PORT="${env_http:-${PROXY_HTTP_PORT:-80}}"
 	PROXY_HTTPS_PORT="${env_https:-${PROXY_HTTPS_PORT:-443}}"
+	PANEL_DOMAIN="${env_domain:-$PANEL_DOMAIN}"
+	PANEL_EMAIL="${env_email:-$PANEL_EMAIL}"
+	PANEL_URL=""
 	IMAGE="$IMAGE_REPO:$VERSION"
 }
 
@@ -689,6 +697,88 @@ wait_healthy() {
 	warn "still not healthy after 2 minutes; check: docker logs -f $CONTAINER_NAME"
 }
 
+valid_domain() {
+	[[ "$1" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]]
+}
+
+# ask_panel_domain: offers serving the panel through the Proxy Manager on a domain or the
+# public IP. Sets PANEL_DOMAIN to a domain, an IP or "none", and PANEL_EMAIL for HTTPS.
+ask_panel_domain() {
+	[ "$PROXY_MANAGER_ENABLE" = "true" ] || return 0
+	from_env PANEL_DOMAIN && return 0
+	can_prompt || return 0
+	local ip choice def=2 answer
+	ip="$(public_ip)"
+	case "$PANEL_DOMAIN" in
+	none) def=3 ;;
+	"" | ip) def=2 ;;
+	*) valid_ipv4 "$PANEL_DOMAIN" && def=2 || def=1 ;;
+	esac
+	echo >/dev/tty
+	printf '%sPanel address%s (press Enter to keep the value in brackets)\n\n' "$BOLD" "$NC" >/dev/tty
+	ask_choice choice "How should the panel be reached through the Proxy Manager?" "$def" \
+		"A domain name, e.g. manager.example.com (HTTPS with Let's Encrypt)" \
+		"The public IP address: http://$ip" \
+		"Not through the proxy (keep $ADDR)"
+	case "$choice" in
+	1)
+		local domain_def="$PANEL_DOMAIN"
+		case "$domain_def" in none | ip) domain_def="" ;; esac
+		valid_ipv4 "$domain_def" && domain_def=""
+		while :; do
+			ask answer "  Domain" "${domain_def:-manager.example.com}"
+			answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+			answer="${answer%.}"
+			valid_domain "$answer" && [ "$answer" != "manager.example.com" ] && break
+			warn "enter the domain name pointing to this server"
+		done
+		PANEL_DOMAIN="$answer"
+		local resolved
+		resolved="$(getent ahostsv4 "$PANEL_DOMAIN" 2>/dev/null | awk 'NR==1{print $1}')"
+		if [ -z "$resolved" ]; then
+			warn "$PANEL_DOMAIN does not resolve yet; create an A record for $ip (HTTPS fails until it does)"
+		elif [ "$resolved" != "$ip" ]; then
+			warn "$PANEL_DOMAIN points to $resolved, not $ip; HTTPS fails until the A record is fixed"
+		fi
+		if [ "$PROXY_HTTPS_PORT" != "0" ]; then
+			while :; do
+				ask answer "  Email for Let's Encrypt (empty: HTTP only)" "$PANEL_EMAIL"
+				[ -z "$answer" ] || [[ "$answer" == *@*.* ]] && break
+				warn "enter an email address, or leave it empty"
+			done
+			PANEL_EMAIL="$answer"
+		fi
+		;;
+	2)
+		PANEL_DOMAIN="$ip"
+		[ "$PROXY_HTTP_PORT" = "0" ] && warn "the proxy HTTP port is disabled, so http://$ip will not answer"
+		;;
+	3) PANEL_DOMAIN=none ;;
+	esac
+	echo >/dev/tty
+}
+
+# apply_panel_domain: creates the panel's proxy host through the manager CLI in the container
+# and deploys it. Failures are reported but do not stop the install.
+apply_panel_domain() {
+	[ "$PROXY_MANAGER_ENABLE" = "true" ] || return 0
+	case "$PANEL_DOMAIN" in "" | none) return 0 ;; ip) PANEL_DOMAIN="$(public_ip)" ;; esac
+	local args=(proxy panel-host "$PANEL_DOMAIN") out
+	if [ -n "$PANEL_EMAIL" ]; then
+		args+=(--email "$PANEL_EMAIL")
+	elif ! valid_ipv4 "$PANEL_DOMAIN"; then
+		args+=(--no-tls)
+	fi
+	info "Serving the panel on $PANEL_DOMAIN through the Proxy Manager"
+	if out="$(docker exec "$CONTAINER_NAME" supabase-manager "${args[@]}" 2>&1 | tee /dev/stderr)"; then
+		PANEL_URL="$(printf '%s\n' "$out" | sed -n 's/^Panel is served at //p' | tail -n1)"
+		ok "Panel is served at ${PANEL_URL:-$PANEL_DOMAIN}"
+	else
+		warn "could not set up the panel host; retry with:"
+		warn "  docker exec $CONTAINER_NAME supabase-manager ${args[*]}"
+	fi
+}
+
 public_ip() {
 	local ip
 	ip="$(curl -4fsS --max-time 5 https://ifconfig.io 2>/dev/null || true)"
@@ -712,6 +802,9 @@ print_done() {
 		if [ "$host" = "0.0.0.0" ] || [ -z "$host" ]; then host="$(public_ip)"; fi
 		url="http://$host:$port"
 		echo "  URL:  $url"
+	fi
+	if [ -n "$PANEL_URL" ]; then
+		echo "  Proxied:    $PANEL_URL (Proxy Manager host \"Supabase Manager\")"
 	fi
 	echo
 	echo "  Open it and create the first admin account."
@@ -740,6 +833,7 @@ install_manager() {
 	install_docker
 	load_config
 	configure_interactive
+	ask_panel_domain
 	check_port
 	warn_proxy_ports
 	save_config
@@ -747,6 +841,7 @@ install_manager() {
 	prepare_storage
 	start_container
 	wait_healthy
+	apply_panel_domain
 	print_done
 }
 
@@ -765,6 +860,7 @@ update_manager() {
 	prepare_storage
 	start_container
 	wait_healthy
+	apply_panel_domain
 	docker image prune -f --filter "label=org.opencontainers.image.title=supabase-manager" >/dev/null 2>&1 || true
 	print_done
 }
@@ -776,6 +872,7 @@ configure_manager() {
 	load_config
 	local old_addr="$ADDR"
 	configure_interactive
+	ask_panel_domain
 	if [ "$ADDR" != "$old_addr" ]; then
 		local port="${ADDR##*:}"
 		if [ "$port" != "${old_addr##*:}" ] && ! container_running && port_in_use "$port"; then
@@ -787,6 +884,7 @@ configure_manager() {
 	prepare_storage
 	start_container
 	wait_healthy
+	apply_panel_domain
 	print_done
 }
 
@@ -803,6 +901,7 @@ reinstall_manager() {
 	local old_addr="$ADDR" old_root="$PROJECTS_ROOT"
 	configure_interactive
 	configure_advanced
+	ask_panel_domain
 	ask_reset
 	if [ "${RESET:-0}" = "1" ]; then
 		reset_data "$old_root"
@@ -821,6 +920,7 @@ reinstall_manager() {
 	prepare_storage
 	start_container
 	wait_healthy
+	apply_panel_domain
 	docker image prune -f --filter "label=org.opencontainers.image.title=supabase-manager" >/dev/null 2>&1 || true
 	print_done
 }
