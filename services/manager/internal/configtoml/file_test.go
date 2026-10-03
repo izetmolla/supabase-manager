@@ -127,3 +127,24 @@ func TestSetPorts(t *testing.T) {
 		t.Fatalf("ports = %+v, want %+v", got, p)
 	}
 }
+
+func TestSetSMTP(t *testing.T) {
+	f := load(t)
+	in := SMTP{Enabled: true, Host: "smtp.example.com", Port: 587, User: "apikey", Pass: "secret", AdminEmail: "no-reply@example.com", SenderName: "App", EmailsPerHour: 50}
+	if err := f.SetSMTP(in); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(f.Text(), "secret\"") {
+		t.Fatal("the password was written to config.toml")
+	}
+	got := f.SMTP()
+	if !got.Enabled || got.Host != in.Host || got.Port != 587 || got.User != "apikey" || got.AdminEmail != in.AdminEmail || got.EmailsPerHour != 50 || got.HasPass {
+		t.Fatalf("SMTP() = %+v", got)
+	}
+	if f.String("", "auth", "email", "smtp", "pass") != "env(SMTP_PASS)" {
+		t.Fatal("pass does not reference SMTP_PASS")
+	}
+	if err := f.SetSMTP(SMTP{Enabled: true, Port: 587, AdminEmail: "a@b.c", EmailsPerHour: 1}); err == nil {
+		t.Fatal("missing host accepted")
+	}
+}

@@ -9,9 +9,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/component
 import { PageContainer } from '@/components/layout/layouts'
 import { EmptyState, PageHeader, Section } from '@/components/page-header'
 import { CopyField } from '@/components/copy-field'
+import { ProjectDomainsSection } from '@/components/project-domains'
 import { StatusBadge } from '@/components/status-badge'
 import { useJobs } from '@/components/job-drawer'
-import { useLifecycle, useProject, useProjectStatus, useSlug } from '@/hooks/use-projects'
+import { useLifecycle, useProject, useProjectPublicUrls, useProjectStatus, useSlug } from '@/hooks/use-projects'
 import { api, errorMessage } from '@/lib/api'
 import type { Container, ContainerStats, Job } from '@/lib/types'
 import { formatBytes, serviceUrl, timeAgo } from '@/lib/format'
@@ -190,8 +191,10 @@ export function OverviewPage() {
   const { data: project } = useProject()
   const { data: status, isLoading } = useProjectStatus()
   const lifecycle = useLifecycle()
+  const publicUrls = useProjectPublicUrls()
   if (!project) return null
   const d = status?.details
+  const apiUrl = (d?.api_url && publicUrls.api) || d?.api_url
   const running = project.status === 'running' || project.status === 'error'
 
   return (
@@ -224,17 +227,17 @@ export function OverviewPage() {
             {[
               {
                 label: 'Studio',
-                href: d?.studio_url && serviceUrl(project.slug, 'studio'),
+                href: d?.studio_url && (publicUrls.studio || serviceUrl(project.slug, 'studio')),
                 icon: Table2,
-                hint: 'Table & SQL editor',
+                hint: publicUrls.studio || 'Table & SQL editor',
               },
               {
                 label: 'Mailpit',
-                href: d?.inbucket_url && serviceUrl(project.slug, 'mail'),
+                href: d?.inbucket_url && (publicUrls.mail || serviceUrl(project.slug, 'mail')),
                 icon: Mail,
-                hint: 'Captured auth emails',
+                hint: publicUrls.mail || 'Captured auth emails',
               },
-              { label: 'API', href: d?.api_url, icon: Activity, hint: d?.api_url },
+              { label: 'API', href: apiUrl, icon: Activity, hint: apiUrl },
             ].map((l) => (
               <a
                 key={l.label}
@@ -261,7 +264,8 @@ export function OverviewPage() {
               <Skeleton className="h-48" />
             ) : (
               <div className="grid gap-4">
-                <CopyField label="Project URL" value={d.api_url} />
+                <CopyField label="Project URL" value={apiUrl ?? d.api_url} />
+                {apiUrl !== d.api_url && <CopyField label="Local URL" value={d.api_url} />}
                 <div className="grid gap-4 md:grid-cols-2">
                   <CopyField label="Publishable key" value={d.publishable_key} description="Safe to use in a browser." />
                   <CopyField label="Secret key" value={d.secret_key} secret description="Server-side only. Bypasses RLS." />
@@ -271,6 +275,8 @@ export function OverviewPage() {
               </div>
             )}
           </Section>
+
+          <ProjectDomainsSection />
 
           <Section title="Database" description="Direct Postgres connection for psql, migrations and ORMs.">
             {d ? (

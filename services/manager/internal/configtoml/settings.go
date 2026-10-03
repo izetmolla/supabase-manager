@@ -203,6 +203,89 @@ func (f *File) SetAuth(a AuthSettings) error {
 	return nil
 }
 
+// SMTPPassEnv is the env var config.toml references for the SMTP password.
+const SMTPPassEnv = "SMTP_PASS"
+
+// SMTP is the server Auth sends its emails through (confirmations, invitations, magic links,
+// password recovery, email changes). Disabled, emails are captured by Mailpit instead.
+type SMTP struct {
+	Enabled    bool   `json:"enabled"`
+	Host       string `json:"host"`
+	Port       int    `json:"port"`
+	User       string `json:"user"`
+	Pass       string `json:"pass,omitempty"`
+	HasPass    bool   `json:"has_pass"`
+	AdminEmail string `json:"admin_email"`
+	SenderName string `json:"sender_name"`
+	// EmailsPerHour is auth.rate_limit.email_sent; the CLI's default of 2 is too low for real use.
+	EmailsPerHour int `json:"emails_per_hour"`
+}
+
+func (s SMTP) Validate() error {
+	if !s.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(s.Host) == "" {
+		return fmt.Errorf("the SMTP host is required")
+	}
+	if s.Port < 1 || s.Port > 65535 {
+		return fmt.Errorf("the SMTP port must be between 1 and 65535")
+	}
+	if !strings.Contains(s.AdminEmail, "@") {
+		return fmt.Errorf("the sender email address is required")
+	}
+	if s.EmailsPerHour < 1 {
+		return fmt.Errorf("emails per hour must be at least 1")
+	}
+	return nil
+}
+
+func (f *File) SMTP() SMTP {
+	s := SMTP{
+		Enabled:       f.Bool(false, "auth", "email", "smtp", "enabled"),
+		Host:          f.String("", "auth", "email", "smtp", "host"),
+		Port:          f.Int(587, "auth", "email", "smtp", "port"),
+		User:          f.String("", "auth", "email", "smtp", "user"),
+		AdminEmail:    f.String("", "auth", "email", "smtp", "admin_email"),
+		SenderName:    f.String("", "auth", "email", "smtp", "sender_name"),
+		EmailsPerHour: f.Int(2, "auth", "rate_limit", "email_sent"),
+	}
+	pass := f.String("", "auth", "email", "smtp", "pass")
+	_, isRef := EnvRef(pass)
+	s.HasPass = pass != "" && !isRef
+	return s
+}
+
+// SetSMTP writes the SMTP server. Like provider secrets, the password is never written to the
+// file: it references SMTP_PASS, kept in the encrypted secret store.
+func (f *File) SetSMTP(s SMTP) error {
+	if err := s.Validate(); err != nil {
+		return err
+	}
+	if s.EmailsPerHour < 1 {
+		s.EmailsPerHour = 2
+	}
+	sets := []struct {
+		section, key string
+		val          any
+	}{
+		{"auth.email.smtp", "enabled", s.Enabled},
+		{"auth.email.smtp", "host", strings.TrimSpace(s.Host)},
+		{"auth.email.smtp", "port", s.Port},
+		{"auth.email.smtp", "user", strings.TrimSpace(s.User)},
+		{"auth.email.smtp", "pass", "env(" + SMTPPassEnv + ")"},
+		{"auth.email.smtp", "admin_email", strings.TrimSpace(s.AdminEmail)},
+		{"auth.email.smtp", "sender_name", strings.TrimSpace(s.SenderName)},
+		{"auth.rate_limit", "email_sent", s.EmailsPerHour},
+	}
+	for _, st := range sets {
+		if err := f.Set(st.section, st.key, st.val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (f *File) Provider(name string) Provider {
 	p := Provider{
 		Name:           name,

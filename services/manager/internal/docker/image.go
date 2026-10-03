@@ -13,8 +13,8 @@ import (
 
 // ContainerDetails is the part of an inspect result the self-update needs.
 type ContainerDetails struct {
-	ID     string
-	Name   string
+	ID    string
+	Name  string
 	Image string
 	// ImageID is the image the container was created from.
 	ImageID string

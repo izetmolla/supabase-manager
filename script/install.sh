@@ -12,6 +12,15 @@
 #   PUID / PGID     user the manager runs as    (default 1000 / 1000)
 #   TZ              timezone                    (default UTC)
 #   SECURE_COOKIES  true when served over HTTPS (default false)
+#   PROXY_MANAGER_ENABLE  true to turn the Proxy Manager on at first start (default false)
+#   PROXY_MANAGER_KIND    first proxy instance: nginx or traefik (default nginx)
+#   PROXY_HTTP_PORT       its HTTP port, 0 disables (default 80)
+#   PROXY_HTTPS_PORT      its HTTPS port, 0 disables (default 443)
+#
+# `install` asks for the listen address, port and Proxy Manager settings when run from a
+# terminal (Enter keeps the default shown in brackets). Settings given as environment variables
+# are not asked; NONINTERACTIVE=1 skips every question. `configure` asks again on an existing
+# install and re-creates the container.
 #
 # Everything lives inside main(), so a partially downloaded script never runs.
 
@@ -29,6 +38,7 @@ main() {
 	case "$command" in
 	install) install_manager ;;
 	update | upgrade) update_manager ;;
+	configure | reconfigure) configure_manager ;;
 	uninstall | remove) uninstall_manager ;;
 	-h | --help | help) usage ;;
 	*)
@@ -40,10 +50,11 @@ main() {
 
 usage() {
 	cat <<EOF
-Usage: install.sh [install|update|uninstall]
+Usage: install.sh [install|update|configure|uninstall]
 
   install    Install Docker if needed, then pull and start Supabase Manager (default)
   update     Pull the latest image and re-create the container (data is kept)
+  configure  Ask for the listen address, port and Proxy Manager again, then re-create the container
   uninstall  Remove the container (PURGE=1 also deletes the data volume and $CONFIG_DIR)
 EOF
 }
@@ -320,6 +331,10 @@ container_running() {
 load_config() {
 	local env_addr="${ADDR:-}" env_root="${PROJECTS_ROOT:-}" env_version="${VERSION:-}"
 	local env_puid="${PUID:-}" env_pgid="${PGID:-}" env_tz="${TZ:-}" env_secure="${SECURE_COOKIES:-}"
+	local env_pm="${PROXY_MANAGER_ENABLE:-}" env_kind="${PROXY_MANAGER_KIND:-}"
+	local env_http="${PROXY_HTTP_PORT:-}" env_https="${PROXY_HTTPS_PORT:-}"
+	# Remembered so the interactive setup does not ask what the environment already decided.
+	FROM_ENV=" ${env_addr:+ADDR} ${env_pm:+PROXY_MANAGER_ENABLE} ${env_kind:+PROXY_MANAGER_KIND} ${env_http:+PROXY_HTTP_PORT} ${env_https:+PROXY_HTTPS_PORT} "
 
 	if [ -f "$CONFIG_FILE" ]; then
 		# shellcheck disable=SC1090
@@ -333,7 +348,171 @@ load_config() {
 	PGID="${env_pgid:-${PGID:-1000}}"
 	TZ="${env_tz:-${TZ:-UTC}}"
 	SECURE_COOKIES="${env_secure:-${SECURE_COOKIES:-false}}"
+	PROXY_MANAGER_ENABLE="${env_pm:-${PROXY_MANAGER_ENABLE:-false}}"
+	PROXY_MANAGER_KIND="${env_kind:-${PROXY_MANAGER_KIND:-nginx}}"
+	PROXY_HTTP_PORT="${env_http:-${PROXY_HTTP_PORT:-80}}"
+	PROXY_HTTPS_PORT="${env_https:-${PROXY_HTTPS_PORT:-443}}"
 	IMAGE="$IMAGE_REPO:$VERSION"
+}
+
+# ---- interactive setup -------------------------------------------------------------------------
+
+# can_prompt: true when questions can be asked. Under `curl | bash` stdin is the script, so the
+# answers are read from the terminal instead.
+can_prompt() {
+	[ "${NONINTERACTIVE:-0}" != "1" ] && (exec </dev/tty) 2>/dev/null
+}
+
+from_env() { case "$FROM_ENV" in *" $1 "*) return 0 ;; esac; return 1; }
+
+# ask VAR "Question" DEFAULT: stores the answer in VAR; an empty answer keeps DEFAULT.
+ask() {
+	local __var="$1" prompt="$2" def="$3" reply=""
+	printf '%s?%s %s %s[%s]%s: ' "$BLUE" "$NC" "$prompt" "$BOLD" "$def" "$NC" >/dev/tty
+	IFS= read -r reply </dev/tty || true
+	reply="$(printf '%s' "$reply" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+	printf -v "$__var" '%s' "${reply:-$def}"
+}
+
+# ask_choice VAR "Question" DEFAULT_NUMBER "label 1" "label 2" ...: stores the chosen number.
+ask_choice() {
+	local __var="$1" prompt="$2" def="$3" i=1 label answer
+	shift 3
+	printf '%s?%s %s\n' "$BLUE" "$NC" "$prompt" >/dev/tty
+	for label in "$@"; do
+		printf '    %d) %s\n' "$i" "$label" >/dev/tty
+		i=$((i + 1))
+	done
+	while :; do
+		ask answer "  Choose 1-$#" "$def"
+		if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "$#" ]; then
+			printf -v "$__var" '%s' "$answer"
+			return
+		fi
+		warn "enter a number between 1 and $#"
+	done
+}
+
+# ask_port VAR "Question" DEFAULT [allow_zero]: asks until the answer is a valid port.
+ask_port() {
+	local __var="$1" prompt="$2" def="$3" zero="${4:-}" answer
+	while :; do
+		ask answer "$prompt" "$def"
+		if [[ "$answer" =~ ^[0-9]+$ ]] && { [ "$answer" -ge 1 ] && [ "$answer" -le 65535 ] || { [ -n "$zero" ] && [ "$answer" = "0" ]; }; }; then
+			printf -v "$__var" '%s' "$answer"
+			return
+		fi
+		warn "enter a port between 1 and 65535${zero:+ (0 disables it)}"
+	done
+}
+
+ask_yes_no() {
+	local __var="$1" prompt="$2" def="$3" answer
+	while :; do
+		ask answer "$prompt (y/n)" "$def"
+		case "$answer" in
+		y | Y | yes | YES | Yes) printf -v "$__var" true && return ;;
+		n | N | no | NO | No) printf -v "$__var" false && return ;;
+		esac
+		warn "answer y or n"
+	done
+}
+
+valid_ipv4() {
+	local ip="$1" part
+	[[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+	for part in ${ip//./ }; do
+		[ "$part" -le 255 ] || return 1
+	done
+}
+
+configure_interactive() {
+	if ! can_prompt; then
+		info "No terminal available; using the saved settings and defaults (see $CONFIG_FILE)"
+		return
+	fi
+	echo >/dev/tty
+	printf '%sSetup%s (press Enter to keep the value in brackets)\n\n' "$BOLD" "$NC" >/dev/tty
+
+	if ! from_env ADDR; then
+		local host="${ADDR%:*}" port="${ADDR##*:}" choice def=1
+		case "$host" in
+		127.0.0.1 | localhost) def=1 ;;
+		0.0.0.0 | "") def=2 ;;
+		*) def=3 ;;
+		esac
+		ask_choice choice "Where should the panel listen?" "$def" \
+			"This machine only (127.0.0.1) - reach it through an SSH tunnel" \
+			"All interfaces (0.0.0.0) - reachable from the network, put HTTPS in front" \
+			"A specific IP address of this server"
+		case "$choice" in
+		1) host=127.0.0.1 ;;
+		2) host=0.0.0.0 ;;
+		3)
+			local custom_def="$host"
+			case "$custom_def" in 127.0.0.1 | localhost | 0.0.0.0 | "") custom_def="$(hostname -I 2>/dev/null | awk '{print $1}')" ;; esac
+			while :; do
+				ask host "  IP address" "${custom_def:-192.168.1.10}"
+				valid_ipv4 "$host" && break
+				warn "enter an IPv4 address such as 192.168.1.10"
+			done
+			;;
+		esac
+		while :; do
+			ask_port port "Panel port" "$port"
+			if ! port_in_use "$port"; then break; fi
+			warn "port $port is already in use; choose another one"
+		done
+		ADDR="$host:$port"
+	fi
+
+	if ! from_env PROXY_MANAGER_ENABLE; then
+		local yn_def=n
+		[ "$PROXY_MANAGER_ENABLE" = "true" ] && yn_def=y
+		echo >/dev/tty
+		ask_yes_no PROXY_MANAGER_ENABLE "Enable the Proxy Manager (nginx/Traefik with TLS for your domains)?" "$yn_def"
+	fi
+	if [ "$PROXY_MANAGER_ENABLE" = "true" ]; then
+		if ! from_env PROXY_MANAGER_KIND; then
+			local kind_choice kind_def=1
+			[ "$PROXY_MANAGER_KIND" = "traefik" ] && kind_def=2
+			ask_choice kind_choice "Which proxy should the first instance run?" "$kind_def" \
+				"nginx - config files, validated with nginx -t and hot-reloaded" \
+				"Traefik - file provider, checked after each reload"
+			PROXY_MANAGER_KIND=nginx
+			[ "$kind_choice" = "2" ] && PROXY_MANAGER_KIND=traefik
+		fi
+		local manager_port="${ADDR##*:}"
+		while :; do
+			from_env PROXY_HTTP_PORT || ask_port PROXY_HTTP_PORT "  HTTP port (0 disables)" "$PROXY_HTTP_PORT" zero
+			from_env PROXY_HTTPS_PORT || ask_port PROXY_HTTPS_PORT "  HTTPS port (0 disables)" "$PROXY_HTTPS_PORT" zero
+			if [ "$PROXY_HTTP_PORT" = "0" ] && [ "$PROXY_HTTPS_PORT" = "0" ]; then
+				warn "enable at least one of the HTTP and HTTPS ports"
+			elif [ "$PROXY_HTTP_PORT" = "$PROXY_HTTPS_PORT" ]; then
+				warn "the HTTP and HTTPS ports must differ"
+			elif [ "$PROXY_HTTP_PORT" = "$manager_port" ] || [ "$PROXY_HTTPS_PORT" = "$manager_port" ]; then
+				warn "port $manager_port is the panel's port"
+			else
+				break
+			fi
+			if from_env PROXY_HTTP_PORT && from_env PROXY_HTTPS_PORT; then
+				die "fix PROXY_HTTP_PORT / PROXY_HTTPS_PORT and run the script again"
+			fi
+		done
+	fi
+	echo >/dev/tty
+}
+
+# warn_proxy_ports: the proxy instance is created on first start; busy ports only make its first
+# deploy fail, so this warns instead of stopping the install.
+warn_proxy_ports() {
+	[ "$PROXY_MANAGER_ENABLE" = "true" ] || return 0
+	local p
+	for p in "$PROXY_HTTP_PORT" "$PROXY_HTTPS_PORT"; do
+		if [ "$p" != "0" ] && ! docker ps --filter "name=^sm-proxy-" --format '{{.Names}}' | grep -q . && port_in_use "$p"; then
+			warn "port $p is in use; the first proxy deploy will fail until it is free (deploy again from Proxy Manager > Instances)"
+		fi
+	done
 }
 
 save_config() {
@@ -347,6 +526,10 @@ PUID=$PUID
 PGID=$PGID
 TZ=$TZ
 SECURE_COOKIES=$SECURE_COOKIES
+PROXY_MANAGER_ENABLE=$PROXY_MANAGER_ENABLE
+PROXY_MANAGER_KIND=$PROXY_MANAGER_KIND
+PROXY_HTTP_PORT=$PROXY_HTTP_PORT
+PROXY_HTTPS_PORT=$PROXY_HTTPS_PORT
 EOF
 	chmod 0600 "$CONFIG_FILE"
 	ok "Settings saved to $CONFIG_FILE"
@@ -388,6 +571,10 @@ start_container() {
 		-e PROJECTS_ROOT="$PROJECTS_ROOT" \
 		-e SECURE_COOKIES="$SECURE_COOKIES" \
 		-e TZ="$TZ" \
+		-e PROXY_MANAGER_ENABLE="$PROXY_MANAGER_ENABLE" \
+		-e PROXY_MANAGER_KIND="$PROXY_MANAGER_KIND" \
+		-e PROXY_HTTP_PORT="$PROXY_HTTP_PORT" \
+		-e PROXY_HTTPS_PORT="$PROXY_HTTPS_PORT" \
 		-v "$DATA_VOLUME":/data \
 		-v "$PROJECTS_ROOT":"$PROJECTS_ROOT" \
 		-v "$DOCKER_SOCKET":/var/run/docker.sock \
@@ -440,6 +627,13 @@ print_done() {
 	fi
 	echo
 	echo "  Open it and create the first admin account."
+	if [ "$PROXY_MANAGER_ENABLE" = "true" ]; then
+		local proxy_ports=""
+		[ "$PROXY_HTTP_PORT" != "0" ] && proxy_ports="HTTP $PROXY_HTTP_PORT"
+		[ "$PROXY_HTTPS_PORT" != "0" ] && proxy_ports="${proxy_ports:+$proxy_ports, }HTTPS $PROXY_HTTPS_PORT"
+		echo "  Proxy:     $PROXY_MANAGER_KIND instance \"default\" on $proxy_ports (Proxy Manager > Instances)"
+		echo "             applied on the first start only; later changes are made in the panel"
+	fi
 	echo "  Projects:  $PROJECTS_ROOT"
 	echo "  Data:      docker volume $DATA_VOLUME"
 	echo "  Logs:      docker logs -f $CONTAINER_NAME"
@@ -457,7 +651,9 @@ install_manager() {
 	install_prerequisites
 	install_docker
 	load_config
+	configure_interactive
 	check_port
+	warn_proxy_ports
 	save_config
 	pull_image
 	prepare_storage
@@ -482,6 +678,27 @@ update_manager() {
 	start_container
 	wait_healthy
 	docker image prune -f --filter "label=org.opencontainers.image.title=supabase-manager" >/dev/null 2>&1 || true
+	print_done
+}
+
+configure_manager() {
+	check_root
+	command_exists docker || die "Docker is not installed; run the installer first"
+	can_prompt || die "configure needs a terminal to ask its questions"
+	load_config
+	local old_addr="$ADDR"
+	configure_interactive
+	if [ "$ADDR" != "$old_addr" ]; then
+		local port="${ADDR##*:}"
+		if [ "$port" != "${old_addr##*:}" ] && ! container_running && port_in_use "$port"; then
+			die "port $port is already in use"
+		fi
+	fi
+	save_config
+	pull_image
+	prepare_storage
+	start_container
+	wait_healthy
 	print_done
 }
 

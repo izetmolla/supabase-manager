@@ -43,6 +43,12 @@ type Config struct {
 	ProxyImageRepository string
 	// ProxyImageTag overrides the proxy image tag (default: the manager's version, or latest).
 	ProxyImageTag string
+	// ProxyManagerEnable turns the Proxy Manager on at first start with one instance of
+	// ProxyManagerKind on ProxyHTTPPort/ProxyHTTPSPort (set by the installer).
+	ProxyManagerEnable bool
+	ProxyManagerKind   string
+	ProxyHTTPPort      int
+	ProxyHTTPSPort     int
 }
 
 func Load() *Config {
@@ -81,6 +87,11 @@ func Load() *Config {
 		ProxyAgentAddr:       env("PROXY_AGENT_ADDR", "127.0.0.1:7070"),
 		ProxyImageRepository: env("PROXY_IMAGE_REPOSITORY", "izetmolla/supabase-manager-proxy"),
 		ProxyImageTag:        env("PROXY_IMAGE_TAG", ""),
+
+		ProxyManagerEnable: env("PROXY_MANAGER_ENABLE", "false") == "true",
+		ProxyManagerKind:   env("PROXY_MANAGER_KIND", "nginx"),
+		ProxyHTTPPort:      envInt("PROXY_HTTP_PORT", 80),
+		ProxyHTTPSPort:     envInt("PROXY_HTTPS_PORT", 443),
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")

@@ -209,6 +209,37 @@ func (s *Server) pmUpdateImage(c fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"job_id": job.ID})
 }
 
+// getProjectDomains lists the proxy host domains that can replace a project's local URLs.
+func (s *Server) getProjectDomains(c fiber.Ctx) error {
+	if !s.pm.Enabled() {
+		return c.JSON(fiber.Map{"enabled": false})
+	}
+	d, err := s.pm.GetProjectDomains(project(c).Slug)
+	if err != nil {
+		return pmError(err)
+	}
+	return c.JSON(fiber.Map{"enabled": true, "available": d.Available, "sites": d.Sites, "selected": d.Selected})
+}
+
+func (s *Server) putProjectDomains(c fiber.Ctx) error {
+	if !s.pm.Enabled() {
+		return pmError(proxymanager.ErrDisabled)
+	}
+	var in struct {
+		Selected map[string]string `json:"selected"`
+	}
+	if err := bindJSON(c, &in); err != nil {
+		return err
+	}
+	p := project(c)
+	changed, err := s.pm.SetProjectDomains(p, in.Selected)
+	if err != nil {
+		return pmError(err)
+	}
+	s.audit(c, "project.domains", p.Slug, fiber.Map{"selected": in.Selected})
+	return c.JSON(fiber.Map{"config_changed": changed})
+}
+
 func (s *Server) pmStatus(c fiber.Ctx) error {
 	st, err := s.pm.Status(c.Context())
 	if err != nil {

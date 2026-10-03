@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api, errorMessage } from '@/lib/api'
-import type { Job, Project, ProjectStatusResponse, Settings } from '@/lib/types'
+import type { Job, Project, ProjectDomains, ProjectStatusResponse, Settings } from '@/lib/types'
 import { useJobs } from '@/components/job-drawer'
 
 const transitional = (s?: string) => s === 'starting' || s === 'stopping'
@@ -40,6 +40,21 @@ export function useSettings(slug = useSlug()) {
     queryKey: ['project', slug, 'config'],
     queryFn: () => api.get<Settings>(`/projects/${slug}/config`),
   })
+}
+
+/** Proxy host domains for the project; `enabled` is false when the Proxy Manager is off. */
+export function useProjectDomains(slug = useSlug()) {
+  return useQuery({
+    queryKey: ['project', slug, 'domains'],
+    queryFn: () => api.get<ProjectDomains>(`/projects/${slug}/domains`),
+    staleTime: 30_000,
+  })
+}
+
+/** The proxy host URLs picked for a project's services; missing ones use the local address. */
+export function useProjectPublicUrls(slug = useSlug()) {
+  const { data } = useProjectDomains(slug)
+  return (data?.enabled && data.selected) || {}
 }
 
 const actionLabels = { start: 'Start project', stop: 'Stop project', restart: 'Restart project' }

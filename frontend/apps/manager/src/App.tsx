@@ -7,6 +7,7 @@ import { SystemPage } from '@/pages/system'
 import { OverviewPage } from '@/pages/project/overview'
 import { ProvidersPage } from '@/pages/project/auth-providers'
 import { AuthUrlPage, AuthSettingsPage } from '@/pages/project/auth-settings'
+import { SMTPPage } from '@/pages/project/smtp'
 import { MigrationsPage, TypesPage } from '@/pages/project/database'
 import { FunctionsPage } from '@/pages/project/functions'
 import { LogsPage } from '@/pages/project/logs'
@@ -92,6 +93,7 @@ export default function App() {
                     { to: 'providers', label: 'Sign In / Providers' },
                     { to: 'url-configuration', label: 'URL Configuration' },
                     { to: 'settings', label: 'Auth Settings' },
+                    { to: 'smtp', label: 'Emails (SMTP)' },
                   ],
                 },
               ]}
@@ -102,6 +104,7 @@ export default function App() {
           <Route path="providers" element={<ProvidersPage />} />
           <Route path="url-configuration" element={<AuthUrlPage />} />
           <Route path="settings" element={<AuthSettingsPage />} />
+          <Route path="smtp" element={<SMTPPage />} />
         </Route>
         <Route
           path="database"

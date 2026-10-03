@@ -13,6 +13,7 @@ const (
 	KeyCLI             = "cli"
 	KeyNetworkDefaults = "network_defaults"
 	KeyStorageDefaults = "storage_defaults"
+	KeySMTPDefaults    = "smtp_defaults"
 )
 
 type Store struct{ db *gorm.DB }

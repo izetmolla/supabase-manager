@@ -5,7 +5,7 @@ import { TopBar } from '@/components/layout/top-bar'
 import { AppRail, IconRail } from '@/components/layout/icon-rail'
 import { JobPanel } from '@/components/job-drawer'
 import { useAuth } from '@/hooks/use-auth'
-import { useProject, useProjectStatus, useSlug } from '@/hooks/use-projects'
+import { useProject, useProjectPublicUrls, useProjectStatus, useSlug } from '@/hooks/use-projects'
 import { serviceUrl } from '@/lib/format'
 import { cn } from '@workspace/ui/lib/utils'
 
@@ -52,7 +52,8 @@ export function ProjectLayout() {
   const slug = useSlug()
   const { data: project, isLoading, error } = useProject(slug)
   const { data: status } = useProjectStatus(slug)
-  const studioUrl = status?.details?.studio_url ? serviceUrl(slug, 'studio') : undefined
+  const publicUrls = useProjectPublicUrls(slug)
+  const studioUrl = status?.details?.studio_url ? publicUrls.studio || serviceUrl(slug, 'studio') : undefined
 
   if (isLoading) return <FullPageSpinner />
   if (error || !project) return <Navigate to="/projects" replace />

@@ -238,6 +238,19 @@ export interface AuthSettings {
   email_double_confirm_changes: boolean
 }
 
+export interface SMTPSettings {
+  enabled: boolean
+  host: string
+  port: number
+  user: string
+  /** Only sent when changing it; never returned. */
+  pass?: string
+  has_pass: boolean
+  admin_email: string
+  sender_name: string
+  emails_per_hour: number
+}
+
 export interface Settings {
   project_id: string
   ports: Ports
@@ -265,6 +278,23 @@ export interface StatusDetails {
   s3_secret_key: string
   s3_region: string
   error?: string
+}
+
+export type ProjectDomainService = 'api' | 'studio' | 'mail' | 'site'
+
+export interface ProjectDomain {
+  service?: ProjectDomainService
+  host_id: number
+  host_name: string
+  domain: string
+  url: string
+}
+
+export interface ProjectDomains {
+  enabled: boolean
+  available?: ProjectDomain[]
+  sites?: ProjectDomain[]
+  selected?: Partial<Record<ProjectDomainService, string>>
 }
 
 export interface ProjectStatusResponse {

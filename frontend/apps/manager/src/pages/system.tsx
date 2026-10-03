@@ -15,7 +15,9 @@ import { NetworkForm } from '@/components/network-form'
 import { StorageForm } from '@/components/storage-form'
 import { api, errorMessage } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import type { CLIInfo, ManagerUpdateInfo, NetworkDefaults, StorageConfig } from '@/lib/types'
+import { SMTPForm, SMTPTest } from '@/components/smtp-form'
+import { useAuth } from '@/hooks/use-auth'
+import type { CLIInfo, ManagerUpdateInfo, NetworkDefaults, SMTPSettings, StorageConfig } from '@/lib/types'
 import { timeAgo } from '@/lib/format'
 import { AUTHOR_EMAIL, AUTHOR_MAILTO, AUTHOR_NAME } from '@/lib/author'
 import { useProxyManagerSettings, type ProxyManagerSettings } from '@/hooks/use-proxy-manager'
@@ -536,7 +538,44 @@ function ProxyManagerSection() {
   )
 }
 
+function SMTPDefaultsSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({ queryKey: ['system', 'smtp'], queryFn: () => api.get<SMTPSettings>('/system/smtp') })
+  const [form, setForm] = useState<SMTPSettings | null>(null)
+  useEffect(() => {
+    if (data) setForm({ ...data, pass: '' })
+  }, [data])
+  const save = useMutation({
+    mutationFn: (d: SMTPSettings) => api.put<SMTPSettings>('/system/smtp', d),
+    onSuccess: (d) => {
+      qc.setQueryData(['system', 'smtp'], d)
+      toast.success('Default SMTP server saved', { description: 'New projects use it; existing ones can copy it under Authentication > Emails.' })
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+
+  if (isLoading || !form) return <Skeleton className="h-28" />
+  return (
+    <Section
+      title="Default SMTP server"
+      description="Used by new projects for auth emails (confirmations, invitations, magic links, password resets). Each project can override it."
+    >
+      <div className="grid gap-4">
+        <SMTPForm value={form} onChange={setForm} />
+        <SMTPTest path="/system/smtp/test" value={form} />
+      </div>
+      <div className="mt-5 flex justify-end">
+        <Button onClick={() => save.mutate(form)} disabled={save.isPending}>
+          {save.isPending && <Loader2 className="animate-spin" />}
+          Save defaults
+        </Button>
+      </div>
+    </Section>
+  )
+}
+
 export function SystemPage() {
+  const { isAdmin } = useAuth()
   return (
     <PageContainer>
       <PageHeader
@@ -549,6 +588,7 @@ export function SystemPage() {
         <ProxyManagerSection />
         <NetworkDefaultsSection />
         <StorageDefaultsSection />
+        {isAdmin && <SMTPDefaultsSection />}
         <Section title="About" description="Who builds and maintains Supabase Manager.">
           <div className="grid gap-1 text-sm">
             <p>

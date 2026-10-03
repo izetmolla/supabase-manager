@@ -35,6 +35,16 @@ type Options struct {
 	// <ImageRepository>-<kind>:<ImageTag>.
 	ImageRepository string
 	ImageTag        string
+	// Bootstrap, when set, enables the Proxy Manager on first start (before an admin ever
+	// toggled it) and creates and deploys a first instance.
+	Bootstrap *Bootstrap
+}
+
+// Bootstrap is the first proxy instance chosen at install time.
+type Bootstrap struct {
+	Kind      string
+	HTTPPort  int
+	HTTPSPort int
 }
 
 var reReleaseVersion = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)

@@ -62,10 +62,19 @@ func (s *Service) SetEnabled(ctx context.Context, on bool) (Settings, error) {
 // returns when ctx is cancelled.
 func (s *Service) Run(ctx context.Context) {
 	var st Settings
-	if _, err := s.settings.Get(settingsKey, &st); err != nil {
+	stored, err := s.settings.Get(settingsKey, &st)
+	if err != nil {
 		log.Printf("proxy manager: read settings: %v", err)
 	}
 	s.migrateInstances()
+	var first uint
+	if !stored && err == nil && s.opts.Bootstrap != nil {
+		if first, err = s.bootstrap(); err != nil {
+			log.Printf("proxy manager: bootstrap: %v", err)
+		} else {
+			st.Enabled = true
+		}
+	}
 	s.stateMu.Lock()
 	s.baseCtx = ctx
 	s.enabled = st.Enabled
@@ -73,10 +82,46 @@ func (s *Service) Run(ctx context.Context) {
 		s.startBackground()
 	}
 	s.stateMu.Unlock()
+	if first != 0 {
+		go s.deployBootstrap(ctx, first)
+	}
 	<-ctx.Done()
 	s.stateMu.Lock()
 	s.stopBackground()
 	s.stateMu.Unlock()
+}
+
+// bootstrap turns the Proxy Manager on and creates the install-time instance when there is
+// none yet. It returns the instance to deploy (0 when instances already exist).
+func (s *Service) bootstrap() (uint, error) {
+	b := s.opts.Bootstrap
+	if err := s.settings.Put(settingsKey, Settings{Enabled: true}); err != nil {
+		return 0, err
+	}
+	log.Printf("proxy manager: enabled at install time (%s, HTTP %d, HTTPS %d)", b.Kind, b.HTTPPort, b.HTTPSPort)
+	var n int64
+	s.db.Model(&ProxyInstance{}).Count(&n)
+	if n > 0 {
+		return 0, nil
+	}
+	in := &ProxyInstance{
+		Name: "default", Kind: b.Kind, HTTPPort: b.HTTPPort, HTTPSPort: b.HTTPSPort,
+		TLSALPN: b.Kind == "nginx" && b.HTTPSPort > 0, Enabled: true,
+	}
+	if err := s.CreateInstance(in); err != nil {
+		return 0, err
+	}
+	return in.ID, nil
+}
+
+func (s *Service) deployBootstrap(ctx context.Context, id uint) {
+	c, cancel := context.WithTimeout(ctx, deployTimeout)
+	defer cancel()
+	if _, err := s.Deploy(c, id, 0, RevisionKindDeploy, "created at install time", func(string) {}); err != nil {
+		log.Printf("proxy manager: deploy of the install-time instance failed (deploy it from Proxy Manager > Instances): %v", err)
+		return
+	}
+	log.Printf("proxy manager: install-time instance %d is running", id)
 }
 
 // startBackground must be called with stateMu held.

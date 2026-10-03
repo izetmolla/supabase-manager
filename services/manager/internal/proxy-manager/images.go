@@ -36,8 +36,8 @@ type ProxyImageTag struct {
 
 // ImageTags lists the available proxy images of one kind.
 type ImageTags struct {
-	Repository string     `json:"repository"`
-	Default    string     `json:"default"`
+	Repository string          `json:"repository"`
+	Default    string          `json:"default"`
 	Tags       []ProxyImageTag `json:"tags"`
 	// HubError explains why Docker Hub could not be listed; local tags are still returned.
 	HubError string `json:"hub_error,omitempty"`

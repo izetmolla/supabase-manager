@@ -237,6 +237,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput, userID uint) (*mod
 		cleanup()
 		return nil, err
 	}
+	if err := s.applySMTPDefaults(proj); err != nil {
+		stdlog.Printf("project %s: default SMTP server not applied: %v", proj.Slug, err)
+	}
 	return proj, nil
 }
 

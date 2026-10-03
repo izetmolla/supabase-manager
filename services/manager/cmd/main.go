@@ -53,10 +53,15 @@ func main() {
 	if managerURL == "" {
 		managerURL = proxymanager.ManagerURLFromAddr(cfg.Addr)
 	}
+	var bootstrap *proxymanager.Bootstrap
+	if cfg.ProxyManagerEnable {
+		bootstrap = &proxymanager.Bootstrap{Kind: cfg.ProxyManagerKind, HTTPPort: cfg.ProxyHTTPPort, HTTPSPort: cfg.ProxyHTTPSPort}
+	}
 	pm := proxymanager.New(gdb, dc, cipher, ps, runner, st, proxymanager.Options{
 		ManagerURL: managerURL, ALPNAddr: cfg.ACMETLSALPNAddr, ManagerAddr: cfg.Addr,
 		AgentAddr: cfg.ProxyAgentAddr, ImageRepository: cfg.ProxyImageRepository,
-		ImageTag: proxymanager.ImageTag(cfg.ProxyImageTag, version.Version),
+		ImageTag:  proxymanager.ImageTag(cfg.ProxyImageTag, version.Version),
+		Bootstrap: bootstrap,
 	})
 	srv := httpapi.New(cfg, gdb, auth.NewService(gdb, cfg.JWTSecret), ps, cli, up, pm)
 
