@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Supabase Manager installer.
 #
-#   curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash
-#   curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s update
-#   curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s uninstall
+#   curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s update
+#   curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s uninstall
 #
 # Settings (environment variables, saved to $CONFIG_DIR/install.env and reused by `update`):
 #   ADDR            listen address              (default 127.0.0.1:8080; 0.0.0.0:8080 exposes it)
@@ -69,7 +69,7 @@ command_exists() { command -v "$1" >/dev/null 2>&1; }
 # ---- checks ------------------------------------------------------------------------------------
 
 check_root() {
-	[ "$(id -u)" = "0" ] || die "run this script as root, e.g. curl -sSL <url> | sudo bash"
+	[ "$(id -u)" = "0" ] || die "run this script as root, e.g. curl -fsSL <url> | sudo bash"
 }
 
 check_os() {
@@ -86,22 +86,116 @@ check_not_container() {
 	fi
 }
 
-ensure_curl() {
-	command_exists curl && return
-	info "Installing curl"
-	if command_exists apt-get; then
-		apt-get update -qq && apt-get install -y -qq curl ca-certificates
-	elif command_exists dnf; then
-		dnf install -y -q curl
-	elif command_exists yum; then
-		yum install -y -q curl
-	elif command_exists apk; then
-		apk add --no-cache curl
-	elif command_exists pacman; then
-		pacman -Sy --noconfirm curl
-	else
-		die "curl is required; install it and run the script again"
+# ---- packages ----------------------------------------------------------------------------------
+
+OS_ID="" OS_LIKE="" OS_NAME="" PKG_MANAGER="" PKG_INDEX_UPDATED=0
+
+detect_os() {
+	if [ -r /etc/os-release ]; then
+		# shellcheck disable=SC1091
+		. /etc/os-release
+		OS_ID="${ID:-}"
+		OS_LIKE="${ID_LIKE:-}"
+		OS_NAME="${PRETTY_NAME:-${NAME:-$OS_ID}}"
 	fi
+	OS_ID="$(printf '%s' "$OS_ID" | tr '[:upper:]' '[:lower:]')"
+	OS_LIKE="$(printf '%s' "$OS_LIKE" | tr '[:upper:]' '[:lower:]')"
+
+	if command_exists apt-get; then
+		PKG_MANAGER=apt
+	elif command_exists dnf; then
+		PKG_MANAGER=dnf
+	elif command_exists yum; then
+		PKG_MANAGER=yum
+	elif command_exists zypper; then
+		PKG_MANAGER=zypper
+	elif command_exists apk; then
+		PKG_MANAGER=apk
+	elif command_exists pacman; then
+		PKG_MANAGER=pacman
+	fi
+	ok "Detected ${OS_NAME:-unknown Linux} (package manager: ${PKG_MANAGER:-none})"
+}
+
+# os_is NAME...: true if ID or ID_LIKE from /etc/os-release matches one of the names.
+os_is() {
+	local name
+	for name in "$@"; do
+		case " $OS_ID $OS_LIKE " in
+		*" $name "*) return 0 ;;
+		esac
+	done
+	return 1
+}
+
+pkg_update_index() {
+	[ "$PKG_INDEX_UPDATED" = "1" ] && return
+	info "Updating the package index"
+	case "$PKG_MANAGER" in
+	apt) DEBIAN_FRONTEND=noninteractive apt-get update -qq ;;
+	dnf) dnf makecache -q -y >/dev/null ;;
+	yum) yum makecache -q -y >/dev/null ;;
+	zypper) zypper --non-interactive --quiet refresh ;;
+	apk) apk update -q ;;
+	pacman) pacman -Sy --noconfirm >/dev/null ;;
+	esac
+	PKG_INDEX_UPDATED=1
+}
+
+# pkg_install PKG...: installs the packages, or upgrades them when already installed.
+pkg_install() {
+	[ "$#" -gt 0 ] || return 0
+	pkg_update_index
+	info "Installing/updating: $*"
+	case "$PKG_MANAGER" in
+	apt) DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$@" ;;
+	dnf)
+		dnf install -y -q "$@"
+		dnf upgrade -y -q "$@" >/dev/null 2>&1 || true
+		;;
+	yum)
+		yum install -y -q "$@"
+		yum update -y -q "$@" >/dev/null 2>&1 || true
+		;;
+	zypper) zypper --non-interactive --quiet install --no-recommends "$@" ;;
+	apk) apk add --no-cache --upgrade "$@" ;;
+	# Arch does not support partial upgrades, so installing anything means a full -Syu.
+	pacman) pacman -Syu --needed --noconfirm "$@" ;;
+	*) die "no supported package manager found; install these by hand and re-run: $*" ;;
+	esac
+}
+
+# Installs (or updates) everything this script and Docker's installer rely on.
+install_prerequisites() {
+	local pkgs=()
+	case "$PKG_MANAGER" in
+	apt) pkgs=(curl ca-certificates gnupg iproute2) ;;
+	dnf | yum) pkgs=(curl ca-certificates iproute) ;;
+	apk) pkgs=(bash curl ca-certificates iproute2) ;;
+	zypper | pacman) pkgs=(curl ca-certificates iproute2) ;;
+	"")
+		local cmd missing=()
+		for cmd in curl awk grep stat seq; do
+			command_exists "$cmd" || missing+=("$cmd")
+		done
+		[ "${#missing[@]}" -eq 0 ] || die "no supported package manager found and missing: ${missing[*]}"
+		warn "no supported package manager found; skipping prerequisite updates"
+		return
+		;;
+	esac
+	# Base tools are only added when missing: minimal RHEL-like images ship coreutils-single,
+	# which conflicts with the coreutils package.
+	command_exists stat && command_exists seq || pkgs+=(coreutils)
+	command_exists grep || pkgs+=(grep)
+	command_exists awk || pkgs+=(gawk)
+	command_exists tar || pkgs+=(tar)
+	# Amazon Linux 2023 ships curl-minimal, which conflicts with the full curl package.
+	if [ "$PKG_MANAGER" = "dnf" ] && rpm -q curl-minimal >/dev/null 2>&1; then
+		pkgs=("${pkgs[@]/#curl/curl-minimal}")
+	fi
+	pkg_install "${pkgs[@]}"
+	command_exists update-ca-certificates && update-ca-certificates >/dev/null 2>&1 || true
+	ok "Prerequisites are installed and up to date"
 }
 
 # port_in_use PORT: true if something other than our container listens on PORT.
@@ -132,13 +226,64 @@ check_port() {
 
 # ---- docker ------------------------------------------------------------------------------------
 
+# Docker CE from Docker's CentOS repository, for RHEL rebuilds that get.docker.com rejects.
+install_docker_rhel_repo() {
+	info "Adding the Docker CE repository"
+	curl -fsSL https://download.docker.com/linux/centos/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo
+	PKG_INDEX_UPDATED=0
+	# podman/buildah conflict with containerd.io on RHEL-like systems.
+	"$PKG_MANAGER" remove -y -q podman-docker runc >/dev/null 2>&1 || true
+	pkg_install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+}
+
+install_docker_engine() {
+	case "$OS_ID" in
+	ubuntu | debian | raspbian | centos | rhel | fedora)
+		info "Installing Docker (get.docker.com)"
+		if curl -fsSL https://get.docker.com | sh; then
+			return
+		fi
+		warn "get.docker.com failed, falling back to the distribution packages"
+		;;
+	amzn)
+		pkg_install docker
+		return
+		;;
+	esac
+
+	case "$PKG_MANAGER" in
+	apt) pkg_install docker.io ;;
+	dnf | yum)
+		if os_is rhel centos fedora; then
+			install_docker_rhel_repo
+		else
+			pkg_install docker
+		fi
+		;;
+	zypper) pkg_install docker ;;
+	apk)
+		# docker lives in the community repository, which is disabled on some installs.
+		if [ -f /etc/apk/repositories ] && ! grep -Eq '^[^#].*/community/?$' /etc/apk/repositories; then
+			sed -i -E 's|^#[[:space:]]*(.*/community/?)$|\1|' /etc/apk/repositories
+			PKG_INDEX_UPDATED=0
+		fi
+		pkg_install docker docker-cli-compose
+		;;
+	pacman) pkg_install docker docker-compose ;;
+	*)
+		info "Unknown distribution, trying get.docker.com"
+		curl -fsSL https://get.docker.com | sh
+		;;
+	esac
+}
+
 install_docker() {
 	if command_exists docker; then
 		ok "Docker is installed ($(docker --version 2>/dev/null | head -n1))"
 	else
-		info "Installing Docker (get.docker.com)"
-		curl -fsSL https://get.docker.com | sh
-		ok "Docker installed"
+		install_docker_engine
+		command_exists docker || die "Docker installation failed; install it by hand (https://docs.docker.com/engine/install/) and re-run"
+		ok "Docker installed ($(docker --version 2>/dev/null | head -n1))"
 	fi
 
 	if ! docker info >/dev/null 2>&1; then
@@ -298,7 +443,7 @@ print_done() {
 	echo "  Projects:  $PROJECTS_ROOT"
 	echo "  Data:      docker volume $DATA_VOLUME"
 	echo "  Logs:      docker logs -f $CONTAINER_NAME"
-	echo "  Update:    curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s update"
+	echo "  Update:    curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s update"
 	echo
 }
 
@@ -308,7 +453,8 @@ install_manager() {
 	check_root
 	check_os
 	check_not_container
-	ensure_curl
+	detect_os
+	install_prerequisites
 	install_docker
 	load_config
 	check_port
@@ -323,7 +469,9 @@ install_manager() {
 update_manager() {
 	check_root
 	command_exists docker || die "Docker is not installed; run the installer first"
-	docker info >/dev/null 2>&1 || die "the Docker daemon is not running"
+	detect_os
+	install_prerequisites
+	install_docker
 	load_config
 	if [ ! -f "$CONFIG_FILE" ]; then
 		warn "$CONFIG_FILE not found, using defaults and current environment"

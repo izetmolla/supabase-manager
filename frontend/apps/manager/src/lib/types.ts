@@ -622,6 +622,15 @@ export interface ProxyImageTags {
   hub_error?: string
 }
 
+export interface ProxyImageUpdate {
+  instance_id: number
+  current: string
+  target?: string
+  reason?: 'new_release' | 'rebuilt' | 'recreate'
+  available: boolean
+  error?: string
+}
+
 export interface ProjectService {
   project: string
   project_name: string

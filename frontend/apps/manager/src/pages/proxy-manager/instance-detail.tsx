@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, FileDiff, Loader2, Pause, Pencil, Play, RotateCcw, Rocket, Search, Square, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowUpCircle, FileDiff, Loader2, Pause, Pencil, Play, RotateCcw, Rocket, Search, Square, Trash2 } from 'lucide-react'
 import { Button } from '@workspace/ui/components/button'
 import { Input } from '@workspace/ui/components/input'
 import { Skeleton } from '@workspace/ui/components/skeleton'
@@ -17,7 +17,19 @@ import {
 import { cn } from '@workspace/ui/lib/utils'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { LazyEditor } from '@/components/lazy-editor'
-import { PM, useDeploy, useHosts, useInstances, useJobAction, usePMMutation, usePreview, useRevisions } from '@/hooks/use-proxy-manager'
+import {
+  PM,
+  updateLabel,
+  useDeploy,
+  useHosts,
+  useInstances,
+  useJobAction,
+  usePMMutation,
+  usePreview,
+  useProxyUpdates,
+  useRevisions,
+  useUpdateProxyImage,
+} from '@/hooks/use-proxy-manager'
 import { api, openStream } from '@/lib/api'
 import { formatBytes, formatDate, timeAgo } from '@/lib/format'
 import type { AccessEntry, ConfigRevision, ProxyInstanceView } from '@/lib/types'
@@ -364,6 +376,9 @@ export function InstanceDetailPage() {
     success: 'Done',
   })
   const remove = usePMMutation(() => api.delete(`${PM}/instances/${id}`), { success: 'Instance deleted' })
+  const { data: updates } = useProxyUpdates()
+  const update = useUpdateProxyImage()
+  const imageUpdate = updates?.find((u) => u.instance_id === id && u.available)
 
   if (isLoading) return <Skeleton className="h-48" />
   if (!inst) return <p className="text-muted-foreground text-sm">Instance not found.</p>
@@ -381,6 +396,19 @@ export function InstanceDetailPage() {
         <AgentBadge v={inst} />
         {inst.pending && <span className="text-xs text-amber-500">changes pending</span>}
         <div className="ml-auto flex flex-wrap gap-2">
+          {imageUpdate && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-brand/50 text-brand"
+              title={`${imageUpdate.current} → ${imageUpdate.target}`}
+              onClick={() => update.mutate({ id: inst.id, name: inst.name })}
+              disabled={update.isPending}
+            >
+              {update.isPending ? <Loader2 className="animate-spin" /> : <ArrowUpCircle />}
+              {updateLabel(imageUpdate)}
+            </Button>
+          )}
           {inst.container?.exists &&
             (running ? (
               <>

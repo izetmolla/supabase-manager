@@ -15,8 +15,10 @@ import (
 type ContainerDetails struct {
 	ID     string
 	Name   string
-	Image  string
-	Labels map[string]string
+	Image string
+	// ImageID is the image the container was created from.
+	ImageID string
+	Labels  map[string]string
 	// Mounts maps container paths to host sources.
 	Mounts map[string]string
 }
@@ -30,6 +32,7 @@ func (c *Client) ContainerDetails(ctx context.Context, name string) (ContainerDe
 	var raw struct {
 		ID     string `json:"Id"`
 		Name   string `json:"Name"`
+		Image  string `json:"Image"`
 		Config struct {
 			Image  string            `json:"Image"`
 			Labels map[string]string `json:"Labels"`
@@ -43,7 +46,7 @@ func (c *Client) ContainerDetails(ctx context.Context, name string) (ContainerDe
 		return ContainerDetails{}, err
 	}
 	d := ContainerDetails{
-		ID: raw.ID, Name: strings.TrimPrefix(raw.Name, "/"), Image: raw.Config.Image,
+		ID: raw.ID, Name: strings.TrimPrefix(raw.Name, "/"), Image: raw.Config.Image, ImageID: raw.Image,
 		Labels: raw.Config.Labels, Mounts: map[string]string{},
 	}
 	for _, m := range raw.Mounts {

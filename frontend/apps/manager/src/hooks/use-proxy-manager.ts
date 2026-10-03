@@ -11,6 +11,7 @@ import type {
   ProjectService,
   ProxyHost,
   ProxyImageTags,
+  ProxyImageUpdate,
   ProxyInstanceView,
   ProxyMeta,
   ProxyPreview,
@@ -124,6 +125,42 @@ export function useDeploy() {
     (v) => ({ note: v.note ?? '' }),
   )
 }
+
+export const useProxyUpdates = () =>
+  useQuery({
+    queryKey: ['pm', 'updates'],
+    queryFn: () => api.get<ProxyImageUpdate[]>(`${PM}/updates`),
+    staleTime: 5 * 60_000,
+    refetchInterval: 10 * 60_000,
+  })
+
+/** Forces a fresh Docker Hub check and stores the result in the updates query. */
+export function useCheckProxyUpdates() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.get<ProxyImageUpdate[]>(`${PM}/updates?refresh=1`),
+    onSuccess: (list) => {
+      qc.setQueryData(['pm', 'updates'], list)
+      const n = list.filter((u) => u.available).length
+      toast.success(n ? `${n} proxy ${n === 1 ? 'image update' : 'image updates'} available` : 'All proxy images are up to date')
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+}
+
+export function useUpdateProxyImage() {
+  return useJobAction<{ id: number; name: string }>(
+    (v) => `/instances/${v.id}/update`,
+    (v) => `Update ${v.name}`,
+  )
+}
+
+export const updateLabel = (u: ProxyImageUpdate) =>
+  u.reason === 'new_release'
+    ? `Update to ${u.target?.split(':').pop()}`
+    : u.reason === 'rebuilt'
+      ? 'Pull new build'
+      : 'Restart on new image'
 
 export function useDeployAll() {
   return useJobAction<void>(

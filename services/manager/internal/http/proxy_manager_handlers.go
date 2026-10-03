@@ -66,6 +66,7 @@ func (s *Server) registerProxyManager(r fiber.Router) {
 	})
 	g.Get("/meta", s.pmMeta)
 	g.Get("/images", s.pmImages)
+	g.Get("/updates", s.pmUpdates)
 	g.Get("/status", s.pmStatus)
 	g.Get("/health", func(c fiber.Ctx) error { return c.JSON(s.pm.Health()) })
 	g.Post("/deploy", s.pmDeployAll)
@@ -79,6 +80,7 @@ func (s *Server) registerProxyManager(r fiber.Router) {
 	g.Post("/instances/:id/stop", s.pmInstanceAction)
 	g.Post("/instances/:id/restart", s.pmInstanceAction)
 	g.Post("/instances/:id/deploy", s.pmDeploy)
+	g.Post("/instances/:id/update", s.pmUpdateImage)
 	g.Get("/instances/:id/preview", s.pmPreview)
 	g.Get("/instances/:id/revisions", s.pmRevisions)
 	g.Get("/instances/:id/revisions/:rev", s.pmRevisionFiles)
@@ -188,6 +190,23 @@ func (s *Server) pmImages(c fiber.Ctx) error {
 		return pmError(err)
 	}
 	return c.JSON(out)
+}
+
+// pmUpdates reports newer proxy images per instance; ?refresh=1 bypasses the Docker Hub cache.
+func (s *Server) pmUpdates(c fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
+	defer cancel()
+	return listJSON(c, list(s.pm.CheckUpdates(ctx, c.Query("refresh") == "1")))
+}
+
+func (s *Server) pmUpdateImage(c fiber.Ctx) error {
+	id := fiber.Params[uint](c, "id")
+	job, err := s.pm.UpdateImageJob(id, currentClaims(c).UserID)
+	if err != nil {
+		return pmError(err)
+	}
+	s.audit(c, "proxy.instance.update_image", fmt.Sprint(id), nil)
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"job_id": job.ID})
 }
 
 func (s *Server) pmStatus(c fiber.Ctx) error {

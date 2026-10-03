@@ -11,7 +11,11 @@ Created by **Izet Molla** ([izetmolla@gmail.com](mailto:izetmolla@gmail.com)).
 On a Linux server (amd64 or arm64), as root:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash
+
+or
+
+curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo ADDR=0.0.0.0:8080 bash -s update
 ```
 
 The [installer](https://github.com/izetmolla/supabase-manager/blob/main/script/install.sh) checks the system and the port, installs Docker if it is missing, pulls `izetmolla/supabase-manager`,
@@ -23,13 +27,13 @@ environment variables and saved to `/etc/supabase-manager/install.env`:
 
 ```bash
 # expose on all interfaces and store projects elsewhere
-curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo ADDR=0.0.0.0:8080 PROJECTS_ROOT=/srv/supabase bash
+curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo ADDR=0.0.0.0:8080 PROJECTS_ROOT=/srv/supabase bash
 
 # update to the latest image (data and projects are kept)
-curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s update
+curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s update
 
 # remove the container (PURGE=1 also deletes the data volume)
-curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s uninstall
+curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s uninstall
 ```
 
 Other options: `VERSION` (image tag), `PUID` / `PGID`, `TZ`, `SECURE_COOKIES`.
@@ -70,16 +74,12 @@ staged deploys, revisions and rollback, health checks and live access logs
 - Per-project networking: publish ports on `127.0.0.1` or `0.0.0.0`, a dedicated Docker network
 with its own driver, subnet, gateway, IP range, MTU, IPv6 and driver options, or an existing network
 
-
-
 ## Requirements
 
 - Linux with Docker (the user running the manager needs access to `/var/run/docker.sock`)
 - [Supabase CLI](https://supabase.com/docs/guides/cli) on `PATH` or `SUPABASE_BIN`; if it is
 missing, the manager downloads the latest release on startup (Linux/macOS, amd64/arm64)
 - To build: Go 1.27+, Node 24+ and pnpm
-
-
 
 ## Quick start (production)
 
@@ -96,8 +96,6 @@ The binary is self-contained because the UI is embedded. Run it from the directo
 `.env` and `data/`, or pass configuration as real environment variables.
 
 ## Docker
-
-
 
 ### Run the published image
 
@@ -209,8 +207,6 @@ make docker-backup                      # ./backups/supabase-manager-data-<date>
 make docker-import-local                # move ./data and the secrets from ./.env into the volume
 ```
 
-
-
 ### Versions and releases
 
 Releases are git tags `manager/vX.Y.Z`; each one is published as `izetmolla/supabase-manager:X.Y.Z`
@@ -302,32 +298,30 @@ Settings come from environment variables. A `.env` file in the working directory
 but real environment variables take precedence.
 
 
-| Variable                | Default                                                               | Description                                                   |
-| ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `ADDR`                  | `127.0.0.1:8080`                                                      | Listen address                                                |
-| `DB_DRIVER`             | `sqlite`                                                              | `sqlite` or `postgres`                                        |
-| `DB_DSN`                | `data/manager.db`                                                     | SQLite file path or Postgres DSN                              |
-| `JWT_SECRET`            | insecure dev value                                                    | Signs session tokens. **Set this.**                           |
-| `ENCRYPTION_KEY`        | derived from `JWT_SECRET`                                             | Encrypts stored secrets. Changing it makes them unreadable.   |
-| `PROJECTS_ROOT`         | `~/supabase-projects` (`/etc/supabase-manager/projects` in the image) | Where new projects are created                                |
-| `SUPABASE_BIN`          | `supabase`                                                            | Supabase CLI binary                                           |
-| `TOOLS_DIR`             | `data/bin`                                                            | Where the manager installs Supabase CLI releases              |
-| `SUPABASE_AUTO_INSTALL` | `true`                                                                | Install the latest CLI on startup when none is found          |
-| `DOCKER_SOCKET`         | `/var/run/docker.sock`                                                | Docker Engine socket                                          |
-| `PORT_RANGE_START`      | `54300`                                                               | Base of the first port block                                  |
-| `PORT_BLOCK`            | `100`                                                                 | Size of each project's port block                             |
-| `INSPECTOR_PORT_START`  | `8083`                                                                | First Edge Runtime inspector port                             |
-| `SECURE_COOKIES`        | `false`                                                               | Set `true` when served over HTTPS                             |
-| `DEV_CORS_ORIGIN`       | empty                                                                 | Allowed origin if the UI is served from another host          |
-| `UPDATE_REPOSITORY`     | `izetmolla/supabase-manager`                                          | Docker Hub repository checked for manager updates             |
-| `SELF_CONTAINER`        | detected                                                              | Name or ID of the manager's own container, if detection fails |
-| `PROXY_MANAGER_URL`     | derived from `ADDR` (`http://127.0.0.1:<port>`)                       | Where proxy instances forward ACME HTTP-01 requests and error pages |
-| `ACME_TLS_ALPN_ADDR`    | `127.0.0.1:5443`                                                      | Listen address of the TLS-ALPN-01 challenge solver            |
-| `PROXY_AGENT_ADDR`      | `127.0.0.1:7070`                                                      | gRPC listen address for proxy agents; a non-loopback address turns on TLS |
-| `PROXY_IMAGE_REPOSITORY`| `izetmolla/supabase-manager-proxy`                                    | Proxy image prefix (`-nginx` / `-traefik` is appended)        |
-| `PROXY_IMAGE_TAG`       | the manager's version (`latest` for development builds)               | Tag of the proxy images used by new instances                 |
-
-
+| Variable                 | Default                                                               | Description                                                               |
+| ------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `ADDR`                   | `127.0.0.1:8080`                                                      | Listen address                                                            |
+| `DB_DRIVER`              | `sqlite`                                                              | `sqlite` or `postgres`                                                    |
+| `DB_DSN`                 | `data/manager.db`                                                     | SQLite file path or Postgres DSN                                          |
+| `JWT_SECRET`             | insecure dev value                                                    | Signs session tokens. **Set this.**                                       |
+| `ENCRYPTION_KEY`         | derived from `JWT_SECRET`                                             | Encrypts stored secrets. Changing it makes them unreadable.               |
+| `PROJECTS_ROOT`          | `~/supabase-projects` (`/etc/supabase-manager/projects` in the image) | Where new projects are created                                            |
+| `SUPABASE_BIN`           | `supabase`                                                            | Supabase CLI binary                                                       |
+| `TOOLS_DIR`              | `data/bin`                                                            | Where the manager installs Supabase CLI releases                          |
+| `SUPABASE_AUTO_INSTALL`  | `true`                                                                | Install the latest CLI on startup when none is found                      |
+| `DOCKER_SOCKET`          | `/var/run/docker.sock`                                                | Docker Engine socket                                                      |
+| `PORT_RANGE_START`       | `54300`                                                               | Base of the first port block                                              |
+| `PORT_BLOCK`             | `100`                                                                 | Size of each project's port block                                         |
+| `INSPECTOR_PORT_START`   | `8083`                                                                | First Edge Runtime inspector port                                         |
+| `SECURE_COOKIES`         | `false`                                                               | Set `true` when served over HTTPS                                         |
+| `DEV_CORS_ORIGIN`        | empty                                                                 | Allowed origin if the UI is served from another host                      |
+| `UPDATE_REPOSITORY`      | `izetmolla/supabase-manager`                                          | Docker Hub repository checked for manager updates                         |
+| `SELF_CONTAINER`         | detected                                                              | Name or ID of the manager's own container, if detection fails             |
+| `PROXY_MANAGER_URL`      | derived from `ADDR` (`http://127.0.0.1:<port>`)                       | Where proxy instances forward ACME HTTP-01 requests and error pages       |
+| `ACME_TLS_ALPN_ADDR`     | `127.0.0.1:5443`                                                      | Listen address of the TLS-ALPN-01 challenge solver                        |
+| `PROXY_AGENT_ADDR`       | `127.0.0.1:7070`                                                      | gRPC listen address for proxy agents; a non-loopback address turns on TLS |
+| `PROXY_IMAGE_REPOSITORY` | `izetmolla/supabase-manager-proxy`                                    | Proxy image prefix (`-nginx` / `-traefik` is appended)                    |
+| `PROXY_IMAGE_TAG`        | the manager's version (`latest` for development builds)               | Tag of the proxy images used by new instances                             |
 
 
 ### Port layout
@@ -418,8 +412,6 @@ The driver is picked from the drivers the Docker daemon reports:
 | Plugins / other        | Any installed network plugin; options are passed through as-is.                                                                                              |
 
 
-
-
 ### Storage (persistent data)
 
 The **Storage** page under Project Settings decides where the database
@@ -507,8 +499,6 @@ Ports used by the proxies are listed in [docs/PORTS.md](docs/PORTS.md).
 ## Author
 
 Supabase Manager is created and maintained by **Izet Molla**: [izetmolla@gmail.com](mailto:izetmolla@gmail.com).
-
-
 
 ## Notes for sandboxed environments
 

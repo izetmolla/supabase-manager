@@ -58,6 +58,31 @@ func TestListImageTags(t *testing.T) {
 	}
 }
 
+func TestCheckUpdateNewRelease(t *testing.T) {
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"next":"","results":[{"name":"latest"},{"name":"1.2.0"},{"name":"1.10.0"},{"name":"1.9.9"}]}`))
+	}))
+	defer hub.Close()
+	prev := hubTagsAPI
+	hubTagsAPI = hub.URL + "/"
+	defer func() { hubTagsAPI = prev }()
+
+	s := &Service{}
+	u := s.checkUpdate(context.Background(), &ProxyInstance{ID: 1, Image: "acme/proxy-nginx:1.2.0"}, true)
+	if !u.Available || u.Reason != UpdateNewRelease || u.Target != "acme/proxy-nginx:1.10.0" {
+		t.Fatalf("unexpected update: %+v", u)
+	}
+	if u := s.checkUpdate(context.Background(), &ProxyInstance{Image: "ghcr.io/acme/proxy:1.0.0"}, false); u.Available || u.Error == "" {
+		t.Fatalf("non-Hub image: %+v", u)
+	}
+	if repo, tag := splitImage("localhost:5000/proxy"); repo != "localhost:5000/proxy" || tag != "latest" {
+		t.Fatalf("splitImage = %s %s", repo, tag)
+	}
+	if got := digestOf([]string{"docker.io/acme/p@sha256:a", "other/p@sha256:b"}, "acme/p"); !slices.Equal(got, []string{"sha256:a"}) {
+		t.Fatalf("digestOf = %v", got)
+	}
+}
+
 func TestOnDockerHub(t *testing.T) {
 	for repo, want := range map[string]bool{
 		"nginx": true, "izetmolla/supabase-manager-proxy-nginx": true,

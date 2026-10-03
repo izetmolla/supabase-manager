@@ -16,6 +16,30 @@ type LocalTag struct {
 	Size    int64     `json:"size"`
 }
 
+// ImageInfo identifies a local image.
+type ImageInfo struct {
+	ID string
+	// RepoDigests are the registry digests ("repo@sha256:...") the image was pulled as.
+	RepoDigests []string
+}
+
+// InspectImage returns ErrNotFound when ref is not present on this host.
+func (c *Client) InspectImage(ctx context.Context, ref string) (ImageInfo, error) {
+	resp, err := c.do(ctx, http.MethodGet, "/images/"+url.PathEscape(ref)+"/json", nil)
+	if err != nil {
+		return ImageInfo{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var raw struct {
+		ID          string   `json:"Id"`
+		RepoDigests []string `json:"RepoDigests"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return ImageInfo{}, err
+	}
+	return ImageInfo{ID: raw.ID, RepoDigests: raw.RepoDigests}, nil
+}
+
 // LocalTags lists the tags of repo (e.g. "izetmolla/supabase-manager-proxy-nginx") pulled or
 // built on this host.
 func (c *Client) LocalTags(ctx context.Context, repo string) ([]LocalTag, error) {

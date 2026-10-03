@@ -47,6 +47,7 @@ type hubTag struct {
 	Name        string    `json:"name"`
 	LastUpdated time.Time `json:"last_updated"`
 	FullSize    int64     `json:"full_size"`
+	Digest      string    `json:"digest"`
 }
 
 type hubPage struct {

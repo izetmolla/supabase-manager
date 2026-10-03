@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronsUpDown, Loader2, Pencil, Plus, RefreshCw, Server, Trash2 } from 'lucide-react'
+import { ArrowUpCircle, Check, ChevronsUpDown, Loader2, Pencil, Plus, RefreshCw, Server, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@workspace/ui/components/button'
 import { Input } from '@workspace/ui/components/input'
@@ -21,7 +21,17 @@ import {
 import { cn } from '@workspace/ui/lib/utils'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EmptyState, PageHeader } from '@/components/page-header'
-import { PM, useInstances, usePMMutation, useProxyImages, useProxyMeta } from '@/hooks/use-proxy-manager'
+import {
+  PM,
+  updateLabel,
+  useCheckProxyUpdates,
+  useInstances,
+  usePMMutation,
+  useProxyImages,
+  useProxyMeta,
+  useProxyUpdates,
+  useUpdateProxyImage,
+} from '@/hooks/use-proxy-manager'
 import { api, errorMessage } from '@/lib/api'
 import { formatBytes, timeAgo } from '@/lib/format'
 import type { ProxyImageTags, ProxyInstance, ProxyKind } from '@/lib/types'
@@ -243,6 +253,10 @@ export function InstancesPage() {
   const [open, setOpen] = useState(false)
   const [del, setDel] = useState<ProxyInstance | null>(null)
   const remove = usePMMutation((id: number) => api.delete(`${PM}/instances/${id}`), { success: 'Instance deleted' })
+  const { data: updates } = useProxyUpdates()
+  const check = useCheckProxyUpdates()
+  const update = useUpdateProxyImage()
+  const updateFor = (id: number) => updates?.find((u) => u.instance_id === id && u.available)
 
   return (
     <>
@@ -250,14 +264,19 @@ export function InstancesPage() {
         title="Proxy Instances"
         description="nginx and Traefik containers serving your hosts. Several instances can run side by side on different addresses or ports."
         actions={
-          <Button
-            onClick={() => {
-              setEdit(undefined)
-              setOpen(true)
-            }}
-          >
-            <Plus /> New instance
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending}>
+              <RefreshCw className={cn(check.isPending && 'animate-spin')} /> Check for updates
+            </Button>
+            <Button
+              onClick={() => {
+                setEdit(undefined)
+                setOpen(true)
+              }}
+            >
+              <Plus /> New instance
+            </Button>
+          </>
         }
       />
       {isLoading ? (
@@ -312,6 +331,23 @@ export function InstancesPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs">{i.deployed_at ? timeAgo(i.deployed_at) : 'never'}</TableCell>
                   <TableCell className="text-right whitespace-nowrap">
+                    {(() => {
+                      const u = updateFor(i.id)
+                      return (
+                        u && (
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            className="mr-1"
+                            title={`${u.current} → ${u.target}`}
+                            onClick={() => update.mutate({ id: i.id, name: i.name })}
+                            disabled={update.isPending}
+                          >
+                            <ArrowUpCircle /> {updateLabel(u)}
+                          </Button>
+                        )
+                      )
+                    })()}
                     <Button
                       variant="ghost"
                       size="icon-xs"
