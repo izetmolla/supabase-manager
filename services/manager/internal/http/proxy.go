@@ -168,11 +168,12 @@ func (s *Server) sameOrigin(c fiber.Ctx) bool {
 // managerPaths are first path segments owned by the manager UI and API.
 var managerPaths = map[string]bool{
 	"": true, "login": true, "setup": true, "projects": true, "settings": true,
-	"assets": true, "favicon.svg": true, "index.html": true, "proxy": true,
+	"assets": true, "favicon.svg": true, "index.html": true, "proxy": true, "proxy-manager": true,
 }
 
 var managerAPIPaths = map[string]bool{
 	"health": true, "version": true, "auth": true, "system": true, "users": true, "audit": true, "jobs": true, "projects": true,
+	"proxy-manager": true,
 }
 
 func firstSegment(p string) (seg, rest string) {

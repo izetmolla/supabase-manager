@@ -1,0 +1,374 @@
+==> certs/1.crt <==
+CERT
+==> certs/1.key <==
+KEY
+==> hosts/1.conf <==
+# Host 1: example.com, www.example.com (generated)
+
+limit_req_zone $binary_remote_addr zone=sm_h1:10m rate=20r/s;
+
+geo $sm_deny_h1 {
+    default 0;
+    192.0.2.0/24 1;
+}
+
+geo $sm_allow_h1 {
+    default 1;
+}
+
+map $http_origin $sm_cors_h1 {
+    default "";
+    "https://app.example.com" $http_origin;
+}
+
+server {
+    listen 10.0.0.5:80;
+    server_name example.com www.example.com;
+    access_log /var/log/nginx/sm/1.log sm_json;
+    location ^~ /.well-known/acme-challenge/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+    }
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 10.0.0.5:443 ssl;
+    http2 on;
+    server_name example.com www.example.com;
+    access_log /var/log/nginx/sm/1.log sm_json;
+    ssl_certificate certs/1.crt;
+    ssl_certificate_key certs/1.key;
+    client_max_body_size 50m;
+    deny 10.9.0.0/16;
+    allow 10.0.0.0/8;
+    deny all;
+    auth_basic "Restricted";
+    auth_basic_user_file htpasswd/1;
+    satisfy any;
+    limit_req zone=sm_h1 burst=40 nodelay;
+    limit_req_status 429;
+    # Custom configuration
+    add_header X-Raw nginx;
+    location /api {
+        if ($sm_deny_h1) {
+            return 403;
+        }
+        if ($sm_allow_h1 = 0) {
+            return 403;
+        }
+        set $sm_up "sm_u1";
+        set $sm_scheme http;
+        set $sm_m0 "";
+        if ($http_x_version = "2") {
+            set $sm_m0 "${sm_m0}1";
+        }
+        if ($sm_m0 = "1") {
+            set $sm_up sm_u2;
+            set $sm_scheme https;
+        }
+        rewrite "^/api/?(.*)$" /$1 break;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Env "prod";
+        proxy_set_header X-Route "api";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_ssl_server_name on;
+        add_header X-Frame-Options "DENY" always;
+        add_header Server "" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Access-Control-Allow-Origin "$sm_cors_h1" always;
+        add_header Access-Control-Allow-Methods "GET,POST" always;
+        add_header Access-Control-Allow-Headers "Authorization,Content-Type" always;
+        add_header Access-Control-Allow-Credentials "true" always;
+        add_header Access-Control-Max-Age "600" always;
+        add_header Vary "Origin" always;
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+        proxy_pass $sm_scheme://$sm_up;
+    }
+    location = /status {
+        if ($sm_deny_h1) {
+            return 403;
+        }
+        if ($sm_allow_h1 = 0) {
+            return 403;
+        }
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Env "prod";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        add_header X-Frame-Options "DENY" always;
+        add_header Server "" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Access-Control-Allow-Origin "$sm_cors_h1" always;
+        add_header Access-Control-Allow-Methods "GET,POST" always;
+        add_header Access-Control-Allow-Headers "Authorization,Content-Type" always;
+        add_header Access-Control-Allow-Credentials "true" always;
+        add_header Access-Control-Max-Age "600" always;
+        add_header Vary "Origin" always;
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+        proxy_pass http://sm_u1;
+    }
+    location ~ "^/v[0-9]+/" {
+        if ($sm_deny_h1) {
+            return 403;
+        }
+        if ($sm_allow_h1 = 0) {
+            return 403;
+        }
+        set $sm_up "sm_u1";
+        set $sm_scheme http;
+        set $sm_m0 "";
+        if ($http_user_agent ~ "^curl") {
+            set $sm_m0 "${sm_m0}1";
+        }
+        if ($sm_m0 = "1") {
+            set $sm_up sm_u2;
+            set $sm_scheme https;
+        }
+        rewrite "^/v[0-9]+/(.*)" "/$1" break;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Env "prod";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_ssl_server_name on;
+        add_header X-Frame-Options "DENY" always;
+        add_header Server "" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Access-Control-Allow-Origin "$sm_cors_h1" always;
+        add_header Access-Control-Allow-Methods "GET,POST" always;
+        add_header Access-Control-Allow-Headers "Authorization,Content-Type" always;
+        add_header Access-Control-Allow-Credentials "true" always;
+        add_header Access-Control-Max-Age "600" always;
+        add_header Vary "Origin" always;
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+        proxy_pass $sm_scheme://$sm_up;
+    }
+    location / {
+        if ($sm_deny_h1) {
+            return 403;
+        }
+        if ($sm_allow_h1 = 0) {
+            return 403;
+        }
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Env "prod";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        add_header X-Frame-Options "DENY" always;
+        add_header Server "" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Access-Control-Allow-Origin "$sm_cors_h1" always;
+        add_header Access-Control-Allow-Methods "GET,POST" always;
+        add_header Access-Control-Allow-Headers "Authorization,Content-Type" always;
+        add_header Access-Control-Allow-Credentials "true" always;
+        add_header Access-Control-Max-Age "600" always;
+        add_header Vary "Origin" always;
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+        proxy_pass http://sm_u1;
+    }
+}
+==> hosts/2.conf <==
+# Host 2: old.example.com (generated)
+
+server {
+    listen 10.0.0.5:80;
+    server_name old.example.com;
+    access_log /var/log/nginx/sm/2.log sm_json;
+    location ^~ /.well-known/acme-challenge/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+    }
+    location / {
+        return 301 "https://example.com$request_uri";
+    }
+}
+==> hosts/3.conf <==
+# Host 3: gone.example.com (generated)
+
+server {
+    listen 10.0.0.5:80;
+    server_name gone.example.com;
+    access_log /var/log/nginx/sm/3.log sm_json;
+    location ^~ /.well-known/acme-challenge/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+    }
+    location / {
+        default_type text/html;
+        return 410 "Gone";
+    }
+}
+==> hosts/4.conf <==
+# Host 4: plain.example.org (generated)
+
+server {
+    listen 10.0.0.5:80;
+    server_name plain.example.org;
+    access_log /var/log/nginx/sm/4.log sm_json;
+    location ^~ /.well-known/acme-challenge/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+    }
+    client_max_body_size 0;
+    location / {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection "";
+        proxy_ssl_server_name on;
+        proxy_pass https://sm_u2;
+    }
+}
+==> htpasswd/1 <==
+admin:$apr1$abcdefgh$FBwExRW4dCc8aL.OvjpIE1
+==> nginx.conf <==
+# Generated by Supabase Manager for instance "edge". Changes are overwritten on deploy.
+worker_processes auto;
+pid /var/run/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 4096;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    tcp_nopush on;
+    keepalive_timeout 65;
+    server_tokens off;
+    server_names_hash_bucket_size 128;
+    client_max_body_size 16m;
+    proxy_buffer_size 16k;
+    proxy_buffers 8 16k;
+    proxy_busy_buffers_size 32k;
+
+    log_format sm_json escape=json '{"time":"$time_iso8601","host":"$host","remote":"$remote_addr","method":"$request_method","uri":"$request_uri","status":$status,"bytes":$body_bytes_sent,"duration":$request_time,"upstream":"$upstream_addr","upstream_status":"$upstream_status","referer":"$http_referer","ua":"$http_user_agent"}';
+    access_log off;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        "" close;
+    }
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SMSSL:10m;
+    ssl_session_timeout 1d;
+
+    include upstreams.conf;
+    include hosts/*.conf;
+
+    server {
+        listen 10.0.0.5:80 default_server;
+        server_name _;
+        location ^~ /.well-known/acme-challenge/ {
+            proxy_pass http://127.0.0.1:8080;
+            proxy_set_header Host $host;
+        }
+        location / {
+            return 404;
+        }
+    }
+
+    server {
+        listen 10.0.0.5:443 ssl default_server;
+        server_name _;
+        ssl_reject_handshake on;
+    }
+}
+
+stream {
+    include streams.conf;
+}
+==> streams.conf <==
+# TCP/UDP streams (generated)
+
+upstream sm_s3 {
+    hash $remote_addr consistent;
+    server 10.0.2.1:5432;
+}
+
+server {
+    listen 10.0.0.5:5433;
+    proxy_pass sm_s3;
+    proxy_connect_timeout 10s;
+    proxy_timeout 1h;
+}
+
+upstream sm_s2 {
+    server api.internal:8443;
+}
+
+server {
+    listen 10.0.0.5:5353 udp;
+    proxy_pass sm_s2;
+    proxy_timeout 30s;
+}
+
+==> upstreams.conf <==
+# Upstreams (generated)
+
+upstream sm_u1 {
+    ip_hash;
+    server 10.0.1.1:3000 weight=3 max_fails=3 fail_timeout=10s;
+    server 10.0.1.2:3000 max_fails=3 fail_timeout=10s;
+    server 10.0.1.3:3000 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+
+upstream sm_u2 {
+    server api.internal:8443;
+    keepalive 32;
+}
+
+==> warnings <==
+upstream "app": nginx has no cookie stickiness, ip_hash is used instead
+upstream "app": nginx cannot combine backup targets with IP hashing, 10.0.1.3:3000 is used as a regular target

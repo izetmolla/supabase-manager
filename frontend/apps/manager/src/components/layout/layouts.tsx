@@ -91,7 +91,18 @@ function useMenuWidth() {
 }
 
 /** Secondary sidebar used by Auth, Database and Settings, like Studio's product menu. */
-export function ProductLayout({ title, groups }: { title: string; groups: ProductNavGroup[] }) {
+export function ProductLayout({
+  title,
+  groups,
+  banner,
+  wide,
+}: {
+  title: string
+  groups: ProductNavGroup[]
+  /** Shown above the page content, full width (e.g. a pending-changes bar). */
+  banner?: ReactNode
+  wide?: boolean
+}) {
   const [width, setWidth] = useMenuWidth()
   const drag = useRef<{ x: number; w: number } | null>(null)
 
@@ -162,7 +173,8 @@ export function ProductLayout({ title, groups }: { title: string; groups: Produc
         className="bg-border hover:bg-foreground-lighter relative hidden w-px shrink-0 cursor-col-resize touch-none transition-colors after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2 md:block"
       />
       <div className="min-w-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-5xl px-6 py-8">
+        {banner}
+        <div className={cn('mx-auto px-6 py-8', wide ? 'max-w-7xl' : 'max-w-5xl')}>
           <Outlet />
         </div>
       </div>

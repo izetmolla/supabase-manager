@@ -11,9 +11,10 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/static"
-	"github.com/supabase-manager/manager/internal/auth"
 	"github.com/supabase-manager/manager/config"
+	"github.com/supabase-manager/manager/internal/auth"
 	"github.com/supabase-manager/manager/internal/projects"
+	proxymanager "github.com/supabase-manager/manager/internal/proxy-manager"
 	"github.com/supabase-manager/manager/internal/selfupdate"
 	"github.com/supabase-manager/manager/internal/supabase"
 	"github.com/supabase-manager/version"
@@ -27,14 +28,15 @@ type Server struct {
 	projects *projects.Service
 	cli      *supabase.CLIManager
 	updater  *selfupdate.Updater
+	pm       *proxymanager.Service
 	setupMu  sync.Mutex
 
 	upMu    sync.Mutex
 	upCache map[string]upstreamSet
 }
 
-func New(cfg *config.Config, db *gorm.DB, authSvc *auth.Service, ps *projects.Service, cli *supabase.CLIManager, up *selfupdate.Updater) *Server {
-	return &Server{cfg: cfg, db: db, auth: authSvc, projects: ps, cli: cli, updater: up, upCache: map[string]upstreamSet{}}
+func New(cfg *config.Config, db *gorm.DB, authSvc *auth.Service, ps *projects.Service, cli *supabase.CLIManager, up *selfupdate.Updater, pm *proxymanager.Service) *Server {
+	return &Server{cfg: cfg, db: db, auth: authSvc, projects: ps, cli: cli, updater: up, pm: pm, upCache: map[string]upstreamSet{}}
 }
 
 func (s *Server) App(ui fs.FS) *fiber.App {
@@ -54,6 +56,7 @@ func (s *Server) App(ui fs.FS) *fiber.App {
 	}
 
 	configureProxy()
+	s.registerProxyManagerPublic(app)
 	app.All("/proxy/:slug/:service", s.serviceProxy)
 	app.All("/proxy/:slug/:service/*", s.serviceProxy)
 	app.Use(s.studioRoute)
@@ -91,6 +94,8 @@ func (s *Server) App(ui fs.FS) *fiber.App {
 	sys.Get("/storage-defaults", s.getStorageDefaults)
 	sys.Put("/storage-defaults", s.requireAdmin, s.putStorageDefaults)
 	sys.Get("/mounts", s.requireAdmin, s.mounts)
+	sys.Get("/proxy-manager", s.getProxyManagerSettings)
+	sys.Put("/proxy-manager", s.requireAdmin, s.putProxyManagerSettings)
 
 	admin := r.Group("/users", s.requireAdmin)
 	admin.Get("/", s.listUsers)
@@ -149,6 +154,8 @@ func (s *Server) App(ui fs.FS) *fiber.App {
 	p.Get("/stats", s.projectStats)
 	p.Post("/containers/:name/restart", s.restartContainer)
 	p.Get("/containers/:name/logs", s.containerLogs)
+
+	s.registerProxyManager(r)
 
 	r.Get("/jobs/:id", s.getJob)
 	r.Get("/jobs/:id/stream", s.streamJob)

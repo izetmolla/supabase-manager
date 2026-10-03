@@ -35,12 +35,14 @@ RUN pnpm --filter manager build
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 ARG TARGETOS TARGETARCH
 WORKDIR /src
+# The module's replace directives point at shared/ and services/version; the workspace file also
+# lists modules that are not copied into this image.
 ENV CGO_ENABLED=0 \
     GOFLAGS="-trimpath" \
+    GOWORK=off \
     GOPROXY=https://proxy.golang.org,direct
 
-COPY go.work ./
-COPY shared/go.mod ./shared/
+COPY shared/go.mod shared/go.sum ./shared/
 COPY services/manager/go.mod services/manager/go.sum ./services/manager/
 COPY services/version/go.mod ./services/version/
 WORKDIR /src/services/manager
@@ -54,10 +56,11 @@ COPY --from=web /src/services/manager/web/dist ./services/manager/web/dist
 
 ARG VERSION=0.0.0-dev
 ARG COMMIT_SHA=unknown
+WORKDIR /src/services/manager
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -ldflags="-s -w -X github.com/supabase-manager/version.Version=${VERSION} -X github.com/supabase-manager/version.CommitSHA=${COMMIT_SHA}" \
-    -o /main ./services/manager/cmd
+    -o /main ./cmd
 
 # ---- Docker CLI: the Supabase CLI shells out to `docker` (static binary) ------------------------
 FROM docker:${DOCKER_CLI_VERSION}-cli AS docker-cli

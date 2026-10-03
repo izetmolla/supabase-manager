@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package proxyagent.v1;
+
+option go_package = "github.com/supabase-manager/shared/proxyagent/v1;proxyagentv1";
+
+// ProxyAgent connects a proxy container's agent with the manager.
+//
+// The agent dials the manager and keeps one Connect stream open, so agents can run behind NAT
+// or on other hosts. It authenticates with gRPC metadata: "authorization: Bearer <token>" and
+// "x-sm-instance: <instance id>". The first message on the stream is Hello; the manager answers
+// with Welcome. After that the manager sends commands and the agent answers each with a Result
+// carrying the same request_id, and pushes Status and LogChunk messages on its own.
+service ProxyAgent {
+  rpc Connect(stream AgentMessage) returns (stream ManagerMessage);
+}
+
+message AgentMessage {
+  oneof msg {
+    Hello hello = 1;
+    Result result = 2;
+    Status status = 3;
+    LogChunk log = 4;
+  }
+}
+
+message Hello {
+  uint64 instance_id = 1;
+  // "nginx" or "traefik".
+  string kind = 2;
+  string agent_version = 3;
+  string proxy_version = 4;
+  // Checksum of the live configuration; empty when the agent has none yet.
+  string config_checksum = 5;
+}
+
+message ManagerMessage {
+  string request_id = 1;
+  oneof msg {
+    Welcome welcome = 2;
+    Apply apply = 3;
+    Restart restart = 4;
+    StartTail start_tail = 5;
+    StopTail stop_tail = 6;
+    Ping ping = 7;
+  }
+}
+
+message Welcome {
+  // How often the agent should send Status while nothing changes.
+  uint32 status_interval_seconds = 1;
+}
+
+message File {
+  bytes content = 1;
+  uint32 mode = 2;
+}
+
+// Apply replaces the whole configuration. The agent validates it, switches to it and reloads
+// the proxy; when any step fails it restores the previous configuration and reports an error.
+message Apply {
+  // Paths relative to the configuration root.
+  map<string, File> files = 1;
+  string checksum = 2;
+  // Traefik's API entrypoint on 127.0.0.1, used to check for configuration errors.
+  uint32 admin_port = 3;
+}
+
+// Restart restarts the proxy process inside the container.
+message Restart {}
+
+message Ping {}
+
+// StartTail follows the access logs; lines arrive as LogChunk messages with the same stream_id.
+message StartTail {
+  string stream_id = 1;
+  // Number of existing lines to send first.
+  int32 lines = 2;
+}
+
+message StopTail {
+  string stream_id = 1;
+}
+
+message Result {
+  string request_id = 1;
+  bool ok = 2;
+  string error = 3;
+  // Validator or reload output, shown in the deploy log.
+  string output = 4;
+}
+
+message Status {
+  bool proxy_running = 1;
+  // Unix seconds; 0 when the proxy is not running.
+  int64 proxy_started_at = 2;
+  uint32 restarts = 3;
+  string config_checksum = 4;
+  string last_error = 5;
+}
+
+message LogChunk {
+  string stream_id = 1;
+  repeated LogLine lines = 2;
+  // The tail ended; error explains why when it was not stopped by the manager.
+  bool closed = 3;
+  string error = 4;
+}
+
+message LogLine {
+  // Log file name, e.g. "3.log" for nginx host 3 or "access.log" for Traefik.
+  string source = 1;
+  string text = 2;
+}

@@ -144,6 +144,54 @@ func (r *Runner) StartHooks(projectID, userID uint, workdir string, env []string
 	return job, nil
 }
 
+// StartFunc runs fn as a background job whose log lines are streamed like CLI output. Jobs
+// sharing a lock key run one at a time (key 0 is used by manager-wide tasks such as
+// certificate issuance, which do not belong to a project).
+func (r *Runner) StartFunc(lockKey, userID uint, command string, timeout time.Duration, fn func(ctx context.Context, log func(string)) error, onFinish FinishFunc) (*models.Job, error) {
+	r.mu.Lock()
+	if r.busy[lockKey] != 0 {
+		r.mu.Unlock()
+		return nil, ErrBusy
+	}
+	job := &models.Job{ProjectID: lockKey, Command: command, Status: models.JobRunning, StartedBy: userID}
+	if err := r.db.Create(job).Error; err != nil {
+		r.mu.Unlock()
+		return nil, err
+	}
+	st := newStream()
+	r.busy[lockKey] = job.ID
+	r.streams[job.ID] = st
+	r.mu.Unlock()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		st.write("$ " + command)
+		err := fn(ctx, st.write)
+		status, exit := models.JobSucceeded, 0
+		if err != nil {
+			status, exit = models.JobFailed, 1
+			st.write("error: " + err.Error())
+		}
+		now := time.Now()
+		job.Status, job.ExitCode, job.FinishedAt, job.Output = status, exit, &now, st.text(maxStoredOutput)
+		r.db.Model(job).Updates(map[string]any{"status": status, "exit_code": exit, "finished_at": now, "output": job.Output})
+		st.close(status)
+		r.mu.Lock()
+		delete(r.busy, lockKey)
+		r.mu.Unlock()
+		if onFinish != nil {
+			onFinish(job)
+		}
+		time.AfterFunc(2*time.Minute, func() {
+			r.mu.Lock()
+			delete(r.streams, job.ID)
+			r.mu.Unlock()
+		})
+	}()
+	return job, nil
+}
+
 func (r *Runner) execute(job *models.Job, st *stream, workdir string, env []string, timeout time.Duration, hooks Hooks, onFinish FinishFunc, args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

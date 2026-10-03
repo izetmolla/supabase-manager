@@ -6,6 +6,7 @@ import {
   ExternalLink,
   HardDrive,
   Home,
+  Network,
   PanelLeftDashed,
   ScrollText,
   Settings,
@@ -24,6 +25,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip'
 import { cn } from '@workspace/ui/lib/utils'
+import { useProxyManagerSettings } from '@/hooks/use-proxy-manager'
 
 /** Same choices as Studio's "Sidebar control": always open, icons only, or open while hovered. */
 type SidebarBehavior = 'open' | 'closed' | 'expandable'
@@ -79,6 +81,7 @@ export function IconRail({ slug, studioUrl }: { slug: string; studioUrl?: string
 
 /** Navigation outside a project: the projects list and the manager-wide admin pages. */
 export function AppRail({ isAdmin }: { isAdmin: boolean }) {
+  const { data: proxyManager } = useProxyManagerSettings(isAdmin)
   return (
     <Rail
       groups={[
@@ -89,6 +92,7 @@ export function AppRail({ isAdmin }: { isAdmin: boolean }) {
                 { to: '/settings/users', label: 'Team', icon: Users },
                 { to: '/settings/storage', label: 'Containers & Volumes', icon: HardDrive },
               ],
+              ...(proxyManager?.enabled ? [[{ to: '/proxy-manager', label: 'Proxy Manager', icon: Network }]] : []),
               [{ to: '/settings/system', label: 'System Settings', icon: Settings }],
             ]
           : []),

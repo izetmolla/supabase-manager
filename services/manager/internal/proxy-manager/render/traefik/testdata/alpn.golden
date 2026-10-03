@@ -1,0 +1,511 @@
+==> certs/1.crt <==
+CERT
+==> certs/1.key <==
+KEY
+==> dynamic/routing.yml <==
+{
+  "http": {
+    "middlewares": {
+      "acl1-auth": {
+        "basicAuth": {
+          "realm": "Restricted",
+          "removeHeader": true,
+          "users": [
+            "admin:$apr1$abcdefgh$FBwExRW4dCc8aL.OvjpIE1"
+          ]
+        }
+      },
+      "acl1-ip": {
+        "ipAllowList": {
+          "sourceRange": [
+            "10.0.0.0/8"
+          ]
+        }
+      },
+      "h1-body": {
+        "buffering": {
+          "maxRequestBodyBytes": 52428800
+        }
+      },
+      "h1-headers": {
+        "headers": {
+          "accessControlAllowCredentials": true,
+          "accessControlAllowHeaders": [
+            "Authorization",
+            "Content-Type"
+          ],
+          "accessControlAllowMethods": [
+            "GET",
+            "POST"
+          ],
+          "accessControlAllowOriginList": [
+            "https://app.example.com"
+          ],
+          "accessControlMaxAge": 600,
+          "addVaryHeader": true,
+          "customRequestHeaders": {
+            "X-Env": "prod"
+          },
+          "customResponseHeaders": {
+            "Server": "",
+            "X-Frame-Options": "DENY"
+          }
+        }
+      },
+      "h1-hsts": {
+        "headers": {
+          "stsIncludeSubdomains": true,
+          "stsSeconds": 31536000
+        }
+      },
+      "h1-https": {
+        "redirectScheme": {
+          "permanent": true,
+          "scheme": "https"
+        }
+      },
+      "h1-ip": {
+        "ipAllowList": {
+          "sourceRange": [
+            "0.0.0.0/0"
+          ]
+        }
+      },
+      "h1-r0-headers": {
+        "headers": {
+          "customRequestHeaders": {
+            "X-Route": "api"
+          }
+        }
+      },
+      "h1-r0-strip": {
+        "stripPrefix": {
+          "prefixes": [
+            "/api"
+          ]
+        }
+      },
+      "h1-r2-rewrite": {
+        "replacePathRegex": {
+          "regex": "^/v[0-9]+/(.*)",
+          "replacement": "/$1"
+        }
+      },
+      "h1-ratelimit": {
+        "rateLimit": {
+          "average": 20,
+          "burst": 40,
+          "period": "1s"
+        }
+      },
+      "h2-redirect-to": {
+        "redirectRegex": {
+          "permanent": true,
+          "regex": "^https?://[^/]+(/.*)?$",
+          "replacement": "https://example.com${1}"
+        }
+      },
+      "h3-error-page": {
+        "replacePath": {
+          "path": "/.well-known/sm-proxy/error/3"
+        }
+      },
+      "raw-mw": {
+        "headers": {
+          "customResponseHeaders": {
+            "X-Raw": "traefik"
+          }
+        }
+      }
+    },
+    "routers": {
+      "h1-default-websecure": {
+        "entryPoints": [
+          "websecure"
+        ],
+        "middlewares": [
+          "h1-ip",
+          "acl1-ip",
+          "acl1-auth",
+          "h1-ratelimit",
+          "h1-body",
+          "h1-headers",
+          "h1-hsts"
+        ],
+        "priority": 1,
+        "rule": "(Host(`example.com`) || Host(`www.example.com`))",
+        "service": "h1-transport-u1",
+        "tls": {}
+      },
+      "h1-r0-websecure": {
+        "entryPoints": [
+          "websecure"
+        ],
+        "middlewares": [
+          "h1-ip",
+          "acl1-ip",
+          "acl1-auth",
+          "h1-ratelimit",
+          "h1-body",
+          "h1-headers",
+          "h1-r0-strip",
+          "h1-r0-headers",
+          "h1-hsts"
+        ],
+        "priority": 100030,
+        "rule": "(Host(`example.com`) || Host(`www.example.com`)) \u0026\u0026 PathPrefix(`/api`) \u0026\u0026 Header(`X-Version`, `2`)",
+        "service": "h1-transport-u2",
+        "tls": {}
+      },
+      "h1-r1-websecure": {
+        "entryPoints": [
+          "websecure"
+        ],
+        "middlewares": [
+          "h1-ip",
+          "acl1-ip",
+          "acl1-auth",
+          "h1-ratelimit",
+          "h1-body",
+          "h1-headers",
+          "h1-hsts"
+        ],
+        "priority": 100020,
+        "rule": "(Host(`example.com`) || Host(`www.example.com`)) \u0026\u0026 Path(`/status`)",
+        "service": "h1-transport-u1",
+        "tls": {}
+      },
+      "h1-r2-websecure": {
+        "entryPoints": [
+          "websecure"
+        ],
+        "middlewares": [
+          "h1-ip",
+          "acl1-ip",
+          "acl1-auth",
+          "h1-ratelimit",
+          "h1-body",
+          "h1-headers",
+          "h1-r2-rewrite",
+          "h1-hsts"
+        ],
+        "priority": 100010,
+        "rule": "(Host(`example.com`) || Host(`www.example.com`)) \u0026\u0026 PathRegexp(`^/v[0-9]+/`) \u0026\u0026 HeaderRegexp(`User-Agent`, `^curl`)",
+        "service": "h1-transport-u2",
+        "tls": {}
+      },
+      "h1-redirect": {
+        "entryPoints": [
+          "web"
+        ],
+        "middlewares": [
+          "h1-https"
+        ],
+        "priority": 1,
+        "rule": "(Host(`example.com`) || Host(`www.example.com`))",
+        "service": "noop@internal"
+      },
+      "h2-web": {
+        "entryPoints": [
+          "web"
+        ],
+        "middlewares": [
+          "h2-redirect-to"
+        ],
+        "priority": 1,
+        "rule": "Host(`old.example.com`)",
+        "service": "noop@internal"
+      },
+      "h3-web": {
+        "entryPoints": [
+          "web"
+        ],
+        "middlewares": [
+          "h3-error-page"
+        ],
+        "priority": 1,
+        "rule": "Host(`gone.example.com`)",
+        "service": "sm-manager"
+      },
+      "h4-default-web": {
+        "entryPoints": [
+          "web"
+        ],
+        "priority": 1,
+        "rule": "Host(`plain.example.org`)",
+        "service": "u2"
+      },
+      "sm-acme": {
+        "entryPoints": [
+          "web"
+        ],
+        "priority": 1000000000,
+        "rule": "PathPrefix(`/.well-known/acme-challenge/`)",
+        "service": "sm-manager"
+      }
+    },
+    "serversTransports": {
+      "h1-transport": {
+        "forwardingTimeouts": {
+          "dialTimeout": "5s",
+          "responseHeaderTimeout": "120s"
+        },
+        "insecureSkipVerify": true
+      },
+      "u2-transport": {
+        "insecureSkipVerify": true
+      }
+    },
+    "services": {
+      "h1-transport-u1": {
+        "failover": {
+          "fallback": "h1-transport-u1-backup",
+          "service": "h1-transport-u1-primary"
+        }
+      },
+      "h1-transport-u1-backup": {
+        "loadBalancer": {
+          "healthCheck": {
+            "interval": "10s",
+            "path": "/healthz",
+            "status": 200,
+            "timeout": "2s"
+          },
+          "passHostHeader": true,
+          "servers": [
+            {
+              "url": "http://10.0.1.3:3000"
+            }
+          ],
+          "serversTransport": "h1-transport",
+          "sticky": {
+            "cookie": {
+              "httpOnly": true,
+              "name": "sm_u1",
+              "secure": false
+            }
+          }
+        }
+      },
+      "h1-transport-u1-primary": {
+        "weighted": {
+          "healthCheck": {},
+          "services": [
+            {
+              "name": "h1-transport-u1-primary-t0",
+              "weight": 3
+            },
+            {
+              "name": "h1-transport-u1-primary-t1",
+              "weight": 1
+            }
+          ],
+          "sticky": {
+            "cookie": {
+              "httpOnly": true,
+              "name": "sm_u1",
+              "secure": false
+            }
+          }
+        }
+      },
+      "h1-transport-u1-primary-t0": {
+        "loadBalancer": {
+          "healthCheck": {
+            "interval": "10s",
+            "path": "/healthz",
+            "status": 200,
+            "timeout": "2s"
+          },
+          "passHostHeader": true,
+          "servers": [
+            {
+              "url": "http://10.0.1.1:3000"
+            }
+          ],
+          "serversTransport": "h1-transport"
+        }
+      },
+      "h1-transport-u1-primary-t1": {
+        "loadBalancer": {
+          "healthCheck": {
+            "interval": "10s",
+            "path": "/healthz",
+            "status": 200,
+            "timeout": "2s"
+          },
+          "passHostHeader": true,
+          "servers": [
+            {
+              "url": "http://10.0.1.2:3000"
+            }
+          ],
+          "serversTransport": "h1-transport"
+        }
+      },
+      "h1-transport-u2": {
+        "loadBalancer": {
+          "passHostHeader": true,
+          "servers": [
+            {
+              "url": "https://api.internal:8443"
+            }
+          ],
+          "serversTransport": "h1-transport"
+        }
+      },
+      "sm-manager": {
+        "loadBalancer": {
+          "servers": [
+            {
+              "url": "http://127.0.0.1:8080"
+            }
+          ]
+        }
+      },
+      "u2": {
+        "loadBalancer": {
+          "passHostHeader": true,
+          "servers": [
+            {
+              "url": "https://api.internal:8443"
+            }
+          ],
+          "serversTransport": "u2-transport"
+        }
+      }
+    }
+  },
+  "tcp": {
+    "routers": {
+      "s1": {
+        "entryPoints": [
+          "tcp-5433"
+        ],
+        "rule": "HostSNI(`*`)",
+        "service": "s1"
+      }
+    },
+    "services": {
+      "s1": {
+        "loadBalancer": {
+          "servers": [
+            {
+              "address": "10.0.2.1:5432"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "udp": {
+    "routers": {
+      "s2": {
+        "entryPoints": [
+          "udp-5353"
+        ],
+        "service": "s2"
+      }
+    },
+    "services": {
+      "s2": {
+        "loadBalancer": {
+          "servers": [
+            {
+              "address": "api.internal:8443"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+==> dynamic/tls.yml <==
+{
+  "tls": {
+    "certificates": [
+      {
+        "certFile": "/etc/traefik/sm/certs/1.crt",
+        "keyFile": "/etc/traefik/sm/certs/1.key"
+      }
+    ],
+    "options": {
+      "default": {
+        "minVersion": "VersionTLS12",
+        "sniStrict": false
+      }
+    }
+  }
+}
+==> traefik.yml <==
+{
+  "accessLog": {
+    "fields": {
+      "defaultMode": "keep",
+      "headers": {
+        "defaultMode": "drop",
+        "names": {
+          "Referer": "keep",
+          "User-Agent": "keep"
+        }
+      }
+    },
+    "filePath": "/var/log/traefik/access.log",
+    "format": "json"
+  },
+  "api": {
+    "dashboard": false,
+    "insecure": true
+  },
+  "entryPoints": {
+    "tcp-5433": {
+      "address": "10.0.0.5:5433"
+    },
+    "traefik": {
+      "address": "127.0.0.1:8090"
+    },
+    "udp-5353": {
+      "address": "10.0.0.5:5353/udp"
+    },
+    "web": {
+      "address": "10.0.0.5:80",
+      "transport": {
+        "respondingTimeouts": {
+          "idleTimeout": "180s",
+          "readTimeout": "600s"
+        }
+      }
+    },
+    "websecure": {
+      "address": "10.0.0.5:443",
+      "transport": {
+        "respondingTimeouts": {
+          "idleTimeout": "180s",
+          "readTimeout": "600s"
+        }
+      }
+    }
+  },
+  "global": {
+    "checkNewVersion": false,
+    "sendAnonymousUsage": false
+  },
+  "log": {
+    "level": "INFO"
+  },
+  "ping": {
+    "entryPoint": "traefik"
+  },
+  "providers": {
+    "file": {
+      "directory": "/etc/traefik/sm/dynamic",
+      "watch": true
+    }
+  }
+}
+==> warnings <==
+host example.com, www.example.com: Traefik has no IP deny rules, only allow rules apply
+host example.com, www.example.com: Traefik has no IP deny rules, only the allow rules of the access list apply
+host example.com, www.example.com: Traefik requires both the IP allow list and the password (satisfy any is not supported)
+upstream "app": Traefik balances with weighted round robin instead of least connections
+TLS-ALPN-01 needs nginx; Traefik cannot forward ACME TLS challenges, use HTTP-01 or DNS-01 for hosts on this instance

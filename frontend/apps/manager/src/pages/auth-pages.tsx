@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@workspace/ui/components/alert'
 import { FullPageSpinner } from '@/components/layout/layouts'
 import { useAuth } from '@/hooks/use-auth'
 import { errorMessage } from '@/lib/api'
+import { AUTHOR_EMAIL, AUTHOR_MAILTO, AUTHOR_NAME } from '@/lib/author'
 
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   return (
@@ -25,6 +26,12 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: str
           </div>
           {children}
         </div>
+        <p className="text-muted-foreground text-center text-xs">
+          Created by <span className="text-foreground font-medium">{AUTHOR_NAME}</span> ·{' '}
+          <a href={AUTHOR_MAILTO} className="hover:text-foreground underline underline-offset-4">
+            {AUTHOR_EMAIL}
+          </a>
+        </p>
       </div>
       <div className="bg-sidebar relative hidden overflow-hidden border-l lg:flex lg:items-center lg:justify-center">
         <div className="bg-brand/20 absolute -top-32 -right-32 size-96 rounded-full blur-3xl" />

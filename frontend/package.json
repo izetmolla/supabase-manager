@@ -2,6 +2,7 @@
   "name": "frontend",
   "version": "0.0.1",
   "private": true,
+  "author": "Izet Molla <izetmolla@gmail.com>",
   "scripts": {
     "build": "pnpm --filter manager build",
     "dev": "pnpm --filter manager dev",

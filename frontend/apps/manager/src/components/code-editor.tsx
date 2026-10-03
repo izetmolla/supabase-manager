@@ -1,4 +1,4 @@
-import Editor, { loader } from '@monaco-editor/react'
+import Editor, { DiffEditor, loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker'
 import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker'
@@ -23,15 +23,17 @@ monaco.editor.defineTheme('supabase-dark', {
   },
 })
 
+export type EditorLanguage = 'sql' | 'toml' | 'typescript' | 'go' | 'python' | 'swift' | 'dart' | 'json' | 'nginx' | 'plaintext'
+
 export interface CodeEditorProps {
   value: string
   onChange?: (value: string) => void
-  language: 'sql' | 'toml' | 'typescript' | 'go' | 'python' | 'swift' | 'dart' | 'plaintext'
+  language: EditorLanguage
   readOnly?: boolean
   height?: string | number
 }
 
-const monacoLanguage: Record<CodeEditorProps['language'], string> = {
+const monacoLanguage: Record<EditorLanguage, string> = {
   sql: 'sql',
   toml: 'ini',
   typescript: 'typescript',
@@ -39,7 +41,40 @@ const monacoLanguage: Record<CodeEditorProps['language'], string> = {
   python: 'python',
   swift: 'swift',
   dart: 'dart',
+  json: 'json',
+  nginx: 'shell',
   plaintext: 'plaintext',
+}
+
+export interface CodeDiffProps {
+  original: string
+  modified: string
+  language: EditorLanguage
+  height?: string | number
+}
+
+export function CodeDiff({ original, modified, language, height = '60vh' }: CodeDiffProps) {
+  const { resolvedTheme } = useTheme()
+  return (
+    <div className="overflow-hidden rounded-md border">
+      <DiffEditor
+        height={height}
+        language={monacoLanguage[language]}
+        original={original}
+        modified={modified}
+        theme={resolvedTheme === 'dark' ? 'supabase-dark' : 'light'}
+        options={{
+          readOnly: true,
+          renderSideBySide: true,
+          minimap: { enabled: false },
+          fontSize: 12,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          scrollBeyondLastLine: false,
+          wordWrap: 'on',
+        }}
+      />
+    </div>
+  )
 }
 
 export default function CodeEditor({ value, onChange, language, readOnly, height = '60vh' }: CodeEditorProps) {

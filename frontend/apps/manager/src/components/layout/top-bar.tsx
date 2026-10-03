@@ -26,6 +26,7 @@ import {
 import { Avatar, AvatarFallback } from '@workspace/ui/components/avatar'
 import { useAuth } from '@/hooks/use-auth'
 import { useProjects } from '@/hooks/use-projects'
+import { AUTHOR_EMAIL, AUTHOR_MAILTO, AUTHOR_NAME } from '@/lib/author'
 import type { Project } from '@/lib/types'
 import { cn } from '@workspace/ui/lib/utils'
 
@@ -89,6 +90,7 @@ const sections = [
   { prefix: '/settings/users', label: 'Team' },
   { prefix: '/settings/storage', label: 'Containers & Volumes' },
   { prefix: '/settings/system', label: 'System Settings' },
+  { prefix: '/proxy-manager', label: 'Proxy Manager' },
 ]
 
 export function TopBar({ project, studioUrl }: { project?: Project; studioUrl?: string }) {
@@ -174,6 +176,13 @@ export function TopBar({ project, studioUrl }: { project?: Project; studioUrl?: 
             >
               <LogOut />
               Sign out
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <a href={AUTHOR_MAILTO} className="grid gap-0.5">
+                <span className="text-muted-foreground text-xs">Created by {AUTHOR_NAME}</span>
+                <span className="truncate text-xs">{AUTHOR_EMAIL}</span>
+              </a>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

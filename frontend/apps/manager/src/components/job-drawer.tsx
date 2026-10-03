@@ -109,6 +109,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
           es.close()
           qc.invalidateQueries({ queryKey: ['projects'] })
           qc.invalidateQueries({ queryKey: ['project'] })
+          qc.invalidateQueries({ queryKey: ['pm'] })
           if (data.status === 'succeeded') toast.success(`${title} finished`)
           else toast.error(`${title} failed`)
         })

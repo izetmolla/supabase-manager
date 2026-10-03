@@ -21,6 +21,7 @@ import {
   StoragePage,
 } from '@/pages/project/settings'
 import { MountsPage } from '@/pages/mounts'
+import { ProxyManagerRoutes } from '@/pages/proxy-manager'
 
 export default function App() {
   return (
@@ -57,6 +58,14 @@ export default function App() {
           element={
             <RequireAdmin>
               <MountsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/proxy-manager/*"
+          element={
+            <RequireAdmin>
+              <ProxyManagerRoutes />
             </RequireAdmin>
           }
         />

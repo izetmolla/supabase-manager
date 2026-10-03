@@ -2,6 +2,7 @@ go 1.27.1
 
 use (
 	./services/manager
+	./services/proxy-agent
 	./services/version
 	./shared
 )

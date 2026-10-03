@@ -31,6 +31,18 @@ type Config struct {
 	UpdateRepository string
 	// SelfContainer overrides detection of the container the manager runs in.
 	SelfContainer string
+	// ProxyManagerURL is the manager's URL as seen by proxy containers on the host network.
+	// Empty means it is derived from Addr.
+	ProxyManagerURL string
+	// ACMETLSALPNAddr is where the TLS-ALPN-01 solver listens during a challenge.
+	ACMETLSALPNAddr string
+	// ProxyAgentAddr is where the gRPC server for proxy agents listens. A non-loopback address
+	// turns on TLS.
+	ProxyAgentAddr string
+	// ProxyImageRepository is the prefix of the proxy images ("-nginx" or "-traefik" is appended).
+	ProxyImageRepository string
+	// ProxyImageTag overrides the proxy image tag (default: the manager's version, or latest).
+	ProxyImageTag string
 }
 
 func Load() *Config {
@@ -63,6 +75,12 @@ func Load() *Config {
 
 		UpdateRepository: env("UPDATE_REPOSITORY", "izetmolla/supabase-manager"),
 		SelfContainer:    env("SELF_CONTAINER", ""),
+		ProxyManagerURL:  strings.TrimRight(env("PROXY_MANAGER_URL", ""), "/"),
+		ACMETLSALPNAddr:  env("ACME_TLS_ALPN_ADDR", "127.0.0.1:5443"),
+
+		ProxyAgentAddr:       env("PROXY_AGENT_ADDR", "127.0.0.1:7070"),
+		ProxyImageRepository: env("PROXY_IMAGE_REPOSITORY", "izetmolla/supabase-manager-proxy"),
+		ProxyImageTag:        env("PROXY_IMAGE_TAG", ""),
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")

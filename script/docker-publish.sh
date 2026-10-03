@@ -27,6 +27,11 @@ docker push "$version_image"
 
 echo "Published ${image} and ${version_image}"
 
+# The manager starts proxy containers from images with its own version tag.
+if [[ "$service" == "manager" ]]; then
+	VERSION="$version" "$ROOT_DIR/script/docker-proxy-images.sh" publish
+fi
+
 # Publish the matching git tag too (make docker-publish / docker-deploy / release-*).
 tag="$(service_tag_prefix "$service")${version}"
 if [[ "${PUSH_TAG:-1}" == "1" ]] && git -C "$ROOT_DIR" rev-parse -q --verify "refs/tags/$tag" >/dev/null; then

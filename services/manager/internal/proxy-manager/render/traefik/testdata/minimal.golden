@@ -1,0 +1,89 @@
+==> dynamic/routing.yml <==
+{
+  "http": {
+    "routers": {
+      "sm-acme": {
+        "entryPoints": [
+          "web"
+        ],
+        "priority": 1000000000,
+        "rule": "PathPrefix(`/.well-known/acme-challenge/`)",
+        "service": "sm-manager"
+      }
+    },
+    "services": {
+      "sm-manager": {
+        "loadBalancer": {
+          "servers": [
+            {
+              "url": "http://127.0.0.1:8080"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+==> dynamic/tls.yml <==
+{
+  "tls": {
+    "certificates": [],
+    "options": {
+      "default": {
+        "minVersion": "VersionTLS12",
+        "sniStrict": false
+      }
+    }
+  }
+}
+==> traefik.yml <==
+{
+  "accessLog": {
+    "fields": {
+      "defaultMode": "keep",
+      "headers": {
+        "defaultMode": "drop",
+        "names": {
+          "Referer": "keep",
+          "User-Agent": "keep"
+        }
+      }
+    },
+    "filePath": "/var/log/traefik/access.log",
+    "format": "json"
+  },
+  "api": {
+    "dashboard": false,
+    "insecure": true
+  },
+  "entryPoints": {
+    "traefik": {
+      "address": "127.0.0.1:8091"
+    },
+    "web": {
+      "address": ":8081",
+      "transport": {
+        "respondingTimeouts": {
+          "idleTimeout": "180s",
+          "readTimeout": "600s"
+        }
+      }
+    }
+  },
+  "global": {
+    "checkNewVersion": false,
+    "sendAnonymousUsage": false
+  },
+  "log": {
+    "level": "INFO"
+  },
+  "ping": {
+    "entryPoint": "traefik"
+  },
+  "providers": {
+    "file": {
+      "directory": "/etc/traefik/sm/dynamic",
+      "watch": true
+    }
+  }
+}

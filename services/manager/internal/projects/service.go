@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/supabase-manager/manager/internal/auth"
 	"github.com/supabase-manager/manager/config"
+	"github.com/supabase-manager/manager/internal/auth"
 	"github.com/supabase-manager/manager/internal/configtoml"
 	"github.com/supabase-manager/manager/internal/docker"
 	"github.com/supabase-manager/manager/internal/models"

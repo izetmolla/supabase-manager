@@ -360,3 +360,346 @@ export interface AuditLog {
   metadata: string
   created_at: string
 }
+
+// ---- Proxy manager ----
+
+export type ProxyKind = 'nginx' | 'traefik'
+
+export interface ContainerState {
+  exists: boolean
+  id: string
+  image: string
+  status: string
+  running: boolean
+  restarting: boolean
+  restart_count: number
+  exit_code: number
+  error: string
+  started_at: string | null
+}
+
+export interface ProxyInstance {
+  id: number
+  name: string
+  kind: ProxyKind
+  image: string
+  bind_ip: string
+  http_port: number
+  https_port: number
+  admin_port: number
+  tls_alpn: boolean
+  enabled: boolean
+  notes: string
+  deployed_revision_id: number
+  deployed_checksum: string
+  deployed_at: string | null
+  created_at: string
+}
+
+export interface ProxyAgentInfo {
+  connected: boolean
+  connected_at?: string
+  remote_addr?: string
+  agent_version?: string
+  proxy_version?: string
+  proxy_running: boolean
+  proxy_started_at?: string
+  restarts: number
+  config_checksum?: string
+  last_error?: string
+}
+
+export interface ProxyInstanceView extends ProxyInstance {
+  container: ContainerState | null
+  agent: ProxyAgentInfo
+  in_sync: boolean
+  pending: boolean
+  host_count: number
+  stream_count: number
+}
+
+export interface KV {
+  name: string
+  value: string
+}
+
+export interface IPRule {
+  action: 'allow' | 'deny'
+  cidr: string
+}
+
+export interface CORSOptions {
+  enabled: boolean
+  origins: string[]
+  methods: string
+  headers: string
+  credentials: boolean
+  max_age: number
+}
+
+export type PathType = 'prefix' | 'exact' | 'regex'
+
+export interface ProxyRoute {
+  id: number
+  path_type: PathType
+  path: string
+  headers: KV[]
+  upstream_id: number
+  strip_prefix: boolean
+  rewrite_regex: string
+  rewrite_replacement: string
+  access_list_id: number
+  request_headers: KV[]
+  response_headers: KV[]
+}
+
+export type HostKind = 'proxy' | 'redirect' | 'error'
+export type TLSMode = 'none' | 'certificate' | 'auto'
+
+export interface ProxyHost {
+  id: number
+  name: string
+  kind: HostKind
+  domains: string[]
+  upstream_id: number
+  routes: ProxyRoute[]
+  instance_ids: number[]
+  tls: {
+    mode: TLSMode
+    certificate_id: number
+    force_https: boolean
+    hsts: boolean
+    hsts_subdomains: boolean
+    http2: boolean
+  }
+  options: { websocket: boolean; connect_timeout: number; read_timeout: number; max_body_mb: number }
+  security: {
+    access_list_id: number
+    ip_rules: IPRule[]
+    rate_limit: { enabled: boolean; rps: number; burst: number }
+  }
+  headers: { request: KV[]; response: KV[]; cors: CORSOptions }
+  redirect: { url: string; code: number; preserve_path: boolean }
+  error_page: { code: number; body: string }
+  raw_nginx: string
+  raw_traefik: string
+  enabled: boolean
+  notes: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface UpstreamTarget {
+  kind: 'static' | 'project'
+  address: string
+  port: number
+  project: string
+  service: string
+  weight: number
+  backup: boolean
+}
+
+export type LBAlgorithm = 'round_robin' | 'least_conn' | 'ip_hash'
+
+export interface HealthCheck {
+  enabled: boolean
+  path: string
+  interval: number
+  timeout: number
+  expect_status: number
+}
+
+export interface ProxyUpstream {
+  id: number
+  name: string
+  algorithm: LBAlgorithm
+  scheme: 'http' | 'https'
+  tls_skip_verify: boolean
+  sticky: boolean
+  targets: UpstreamTarget[]
+  health: HealthCheck
+  notes: string
+}
+
+export interface ProxyStream {
+  id: number
+  name: string
+  protocol: 'tcp' | 'udp'
+  listen_port: number
+  upstream_id: number
+  instance_ids: number[]
+  enabled: boolean
+}
+
+export interface AccessList {
+  id: number
+  name: string
+  users: { username: string }[]
+  allow: string[]
+  deny: string[]
+  satisfy: 'any' | 'all'
+}
+
+export type ChallengeType = 'http-01' | 'dns-01' | 'tls-alpn-01'
+
+export interface Certificate {
+  id: number
+  name: string
+  domains: string[]
+  source: 'acme' | 'custom'
+  challenge: ChallengeType | ''
+  key_type: string
+  acme_account_id: number
+  dns_provider_id: number
+  issuer: string
+  not_before: string | null
+  not_after: string | null
+  status: 'pending' | 'valid' | 'error'
+  last_error: string
+  auto_renew: boolean
+  last_job_id: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AcmeAccount {
+  id: number
+  name: string
+  email: string
+  directory_url: string
+  eab_key_id: string
+  registered: boolean
+  is_default: boolean
+  last_error: string
+  created_at: string
+}
+
+export interface DNSProvider {
+  id: number
+  name: string
+  code: string
+  keys: string[]
+  created_at: string
+}
+
+export interface CatalogField {
+  key: string
+  description: string
+}
+
+export interface DNSCatalogEntry {
+  code: string
+  name: string
+  url: string
+  credentials: CatalogField[]
+  additional: CatalogField[]
+}
+
+export interface ProxyMeta {
+  directories: { id: string; name: string; url: string }[]
+  dns_providers: DNSCatalogEntry[]
+  nginx_image: string
+  traefik_image: string
+  manager_url: string
+  alpn_addr: string
+  challenge_path: string
+}
+
+export interface ProxyImageTag {
+  tag: string
+  image: string
+  release: boolean
+  local: boolean
+  remote: boolean
+  updated?: string
+  size?: number
+}
+
+export interface ProxyImageTags {
+  repository: string
+  default: string
+  tags: ProxyImageTag[]
+  hub_error?: string
+}
+
+export interface ProjectService {
+  project: string
+  project_name: string
+  service: string
+  label: string
+  host: string
+  port: number
+  status: string
+}
+
+export interface UnhealthyTarget {
+  upstream_id: number
+  upstream: string
+  address: string
+  error: string
+}
+
+export interface ProxyStatus {
+  pending_instances: number[]
+  instances: number
+  running: number
+  hosts: number
+  streams: number
+  upstreams: number
+  certificates: number
+  expiring: Certificate[]
+  unhealthy_targets: UnhealthyTarget[]
+}
+
+export interface TargetHealth {
+  address: string
+  state: 'up' | 'down'
+  error?: string
+  latency_ms: number
+  checked_at: string
+}
+
+export interface PreviewFile {
+  path: string
+  content: string
+  deployed: string
+  status: 'added' | 'removed' | 'changed' | 'same'
+  secret: boolean
+}
+
+export interface ProxyPreview {
+  instance_id: number
+  kind: ProxyKind
+  checksum: string
+  pending: boolean
+  files: PreviewFile[]
+  warnings: string[] | null
+}
+
+export interface ConfigRevision {
+  id: number
+  instance_id: number
+  number: number
+  kind: 'deploy' | 'rollback' | 'certificate'
+  checksum: string
+  status: 'applied' | 'failed' | 'deploying' | 'rolled_back'
+  error: string
+  warnings: string[] | null
+  note: string
+  created_by: number
+  created_at: string
+}
+
+export interface AccessEntry {
+  time: string
+  host: string
+  host_id: number
+  remote: string
+  method: string
+  uri: string
+  status: number
+  bytes: number
+  duration_ms: number
+  upstream: string
+  user_agent: string
+}

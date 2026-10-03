@@ -1,10 +1,38 @@
-<p align="center">
-  <img src="docs/assets/banner.svg" alt="Supabase Manager: run and manage all your Supabase environments from one simple panel" width="880">
-</p>
+![Supabase Manager: run and manage all your Supabase environments from one simple panel](docs/assets/banner.svg)
 
 # Supabase Manager
 
 **Manage all your Supabase environments from one simple panel.**
+
+Created by **Izet Molla** ([izetmolla@gmail.com](mailto:izetmolla@gmail.com)).
+
+## Fast install
+
+On a Linux server (amd64 or arm64), as root:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash
+```
+
+The [installer](https://github.com/izetmolla/supabase-manager/blob/main/script/install.sh) checks the system and the port, installs Docker if it is missing, pulls `izetmolla/supabase-manager`,
+prepares the projects folder and data volume, starts the container and waits until it is healthy.
+Then open the printed URL and create the first admin account.
+
+By default it listens on `127.0.0.1:8080` (reach it through an SSH tunnel). Settings are passed as
+environment variables and saved to `/etc/supabase-manager/install.env`:
+
+```bash
+# expose on all interfaces and store projects elsewhere
+curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo ADDR=0.0.0.0:8080 PROJECTS_ROOT=/srv/supabase bash
+
+# update to the latest image (data and projects are kept)
+curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s update
+
+# remove the container (PURGE=1 also deletes the data volume)
+curl -sSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s uninstall
+```
+
+Other options: `VERSION` (image tag), `PUID` / `PGID`, `TZ`, `SECURE_COOKIES`.
 
 Running more than one Supabase project on a server usually means juggling `supabase start` in
 several folders, port clashes, hand-edited `config.toml` files and a Studio per project. Supabase
@@ -12,12 +40,12 @@ Manager does that for you: create or import a project, press **Start**, and ever
 listed in one place with its status, logs, settings and Studio.
 
 - **One place for every environment:** start, stop and restart projects, see their containers,
-  CPU, memory and live logs.
+CPU, memory and live logs.
 - **No port juggling:** each project gets its own non-colliding port block and Docker network.
 - **Settings without editing files:** auth providers, services, ports, networking and storage are
-  forms; secrets are stored encrypted.
+forms; secrets are stored encrypted.
 - **One URL to remember:** each project's Studio, Mailpit and API are reached through the panel,
-  behind its login.
+behind its login.
 - **Always up to date:** the Supabase CLI and the manager itself update from the panel.
 
 It is one Docker container (or one binary) that drives the host's Docker, so it runs next to your
@@ -29,22 +57,29 @@ existing setup.
 - Create projects (`supabase init` plus automatic, non-colliding port blocks) or import existing ones
 - Start, stop, and restart with live CLI output; container list, CPU/memory stats, and live logs
 - Auth providers (Apple, Google, GitHub, ...) with callback URL hints; client secrets are stored
-  encrypted and injected as `env(...)` references, never written into `config.toml`
+encrypted and injected as `env(...)` references, never written into `config.toml`
 - Auth settings, enabled services, ports, and a raw `config.toml` editor (validated, with a `.bak` backup)
 - Migrations (create, edit, apply, reset, diff), TypeScript type generation, Edge Function scaffolding
 - Built-in reverse proxy: each project's Studio, Mailpit, and API are served on the manager's own
-  port behind its login, so only one port has to be reachable
+port behind its login, so only one port has to be reachable
 - Supabase CLI management: installs the latest release when the CLI is missing, checks for
-  updates, installs a specific version, optional automatic updates
+updates, installs a specific version, optional automatic updates
+- Proxy Manager (admins, off by default): nginx and Traefik containers configured from one place,
+with domains, routes, load balancing, Let's Encrypt and other ACME certificates, access lists,
+staged deploys, revisions and rollback, health checks and live access logs
 - Per-project networking: publish ports on `127.0.0.1` or `0.0.0.0`, a dedicated Docker network
-  with its own driver, subnet, gateway, IP range, MTU, IPv6 and driver options, or an existing network
+with its own driver, subnet, gateway, IP range, MTU, IPv6 and driver options, or an existing network
+
+
 
 ## Requirements
 
 - Linux with Docker (the user running the manager needs access to `/var/run/docker.sock`)
 - [Supabase CLI](https://supabase.com/docs/guides/cli) on `PATH` or `SUPABASE_BIN`; if it is
-  missing, the manager downloads the latest release on startup (Linux/macOS, amd64/arm64)
+missing, the manager downloads the latest release on startup (Linux/macOS, amd64/arm64)
 - To build: Go 1.27+, Node 24+ and pnpm
+
+
 
 ## Quick start (production)
 
@@ -54,13 +89,15 @@ make build                  # pnpm build → services/manager/web/dist, then bin
 ./bin/supabase-manager
 ```
 
-Open http://127.0.0.1:8080 and create the first admin account. The setup page only works while no
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080) and create the first admin account. The setup page only works while no
 users exist.
 
 The binary is self-contained because the UI is embedded. Run it from the directory that holds
 `.env` and `data/`, or pass configuration as real environment variables.
 
 ## Docker
+
+
 
 ### Run the published image
 
@@ -89,7 +126,7 @@ creates the folder on the host if it is missing, and the `alpine` step hands it 
 the top level, so database files inside project folders keep their owners). It is safe to run
 again.
 
-Open http://127.0.0.1:8080 and create the first admin account. `JWT_SECRET` and `ENCRYPTION_KEY`
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080) and create the first admin account. `JWT_SECRET` and `ENCRYPTION_KEY`
 are generated on first start and kept in the data volume.
 
 To update, open **System** (admin menu) > **Supabase Manager** > **Check for updates** and
@@ -110,7 +147,8 @@ project stacks run as sibling containers on the host.
 
 ```bash
 make docker-build                       # services/manager/Dockerfile -> izetmolla/supabase-manager:latest (+ :<version>)
-make docker-publish                     # build and push :latest and :<version> (+ the git tag)
+make docker-publish                     # build and push :latest and :<version> (+ the git tag), and the proxy images
+make proxy-images                       # build the Proxy Manager images locally (nginx and Traefik with sm-proxy-agent)
 make docker-up                          # run detached, restart unless stopped
 make docker-logs                        # follow logs
 make docker-down                        # remove the container (data is kept)
@@ -141,14 +179,16 @@ UI are kept in the data volume.
 
 How the container is wired, and why:
 
-| Mount / option | Purpose |
-| --- | --- |
-| `--network host` | The manager proxies to project ports on `127.0.0.1` and probes free ports on the host |
-| `/var/run/docker.sock` + `--group-add <socket gid>` | Create and manage the Supabase containers, networks and volumes |
-| `PROJECTS_ROOT:PROJECTS_ROOT` | Project folders, mounted at the **same path** because the Supabase CLI passes them to the daemon as bind mounts |
-| volume `supabase-manager-data` → `/data` | Database, generated `JWT_SECRET` / `ENCRYPTION_KEY` (`/data/.env`), CLI installs, CLI home |
-| `--user PUID:PGID` | Runs as the user owning `PROJECTS_ROOT` (default: whoever runs `make`); the image default is 1000:1000 |
-| `--init` | Reaps processes left behind by the Supabase and Docker CLIs |
+
+| Mount / option                                      | Purpose                                                                                                         |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `--network host`                                    | The manager proxies to project ports on `127.0.0.1` and probes free ports on the host                           |
+| `/var/run/docker.sock` + `--group-add <socket gid>` | Create and manage the Supabase containers, networks and volumes                                                 |
+| `PROJECTS_ROOT:PROJECTS_ROOT`                       | Project folders, mounted at the **same path** because the Supabase CLI passes them to the daemon as bind mounts |
+| volume `supabase-manager-data` → `/data`            | Database, generated `JWT_SECRET` / `ENCRYPTION_KEY` (`/data/.env`), CLI installs, CLI home                      |
+| `--user PUID:PGID`                                  | Runs as the user owning `PROJECTS_ROOT` (default: whoever runs `make`); the image default is 1000:1000          |
+| `--init`                                            | Reaps processes left behind by the Supabase and Docker CLIs                                                     |
+
 
 `make docker-up` creates `PROJECTS_ROOT` (default `/etc/supabase-manager/projects`) if needed and
 chowns it and the data volume to `PUID:PGID` before starting, so changing the user is safe. Database files of the projects live in Docker volumes managed by the Supabase CLI and
@@ -169,14 +209,25 @@ make docker-backup                      # ./backups/supabase-manager-data-<date>
 make docker-import-local                # move ./data and the secrets from ./.env into the volume
 ```
 
+
+
 ### Versions and releases
 
 Releases are git tags `manager/vX.Y.Z`; each one is published as `izetmolla/supabase-manager:X.Y.Z`
-and `:latest`. The version is stamped into the binary and shown in the panel.
+and `:latest`, together with `izetmolla/supabase-manager-proxy-nginx` and `-traefik` under the same
+tags. The version is stamped into the binary and shown in the panel; a release manager creates proxy
+containers from the proxy images of its own version, other builds use `:latest`.
 
 ```bash
 make version                            # current release, e.g. 1.4.0
 make release next                       # update, fix, tidy, vet, lint, commit the changes, then release-patch
+make deploy-all                         # build and push every image (manager + proxy images) at the current
+                                        # version: no checks, no version bump, no new tag
+make deploy-all next                    # full pipeline: update, fix, fmt, tidy, proto, vet, lint, tests, frontend
+                                        # checks, build, integration tests, commit, then release-patch and push
+                                        # every image (manager + proxy images) to Docker Hub
+make deploy-all V=2.1.0                 # the same with an explicit version
+make check                              # vet, lint, test, frontend lint and typecheck (no changes, no publish)
 make release-patch                      # 1.4.0 -> 1.4.1: tag, build + push :1.4.1 and :latest, push the git tag
 make release-minor                      # 1.4.0 -> 1.5.0
 make release-major                      # 1.4.0 -> 2.0.0
@@ -215,7 +266,7 @@ make dev
 ```
 
 This runs the API on `:8080` (`go run ./services/manager/cmd`) and the Vite dev server on `:5173`,
-which proxies `/api` to the API. Open http://localhost:5173.
+which proxies `/api` to the API. Open [http://localhost:5173](http://localhost:5173).
 
 Other workflows:
 
@@ -223,6 +274,7 @@ Other workflows:
 make run-manager           # API with air live reload (go install github.com/air-verse/air@latest)
 make run-frontend manager  # Vite dev server only
 make test                  # go test across the workspace
+make test-integration      # Proxy Manager tests against Docker (nginx -t, Traefik, and the proxy images end to end)
 make fmt | tidy | lint     # per-module, via script/go-modules.sh
 make upgrade               # bump Go in go.mod / go.work / Dockerfiles
 ```
@@ -249,39 +301,50 @@ Setting a password signs the user out of all existing sessions and is recorded i
 Settings come from environment variables. A `.env` file in the working directory is also read,
 but real environment variables take precedence.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ADDR` | `127.0.0.1:8080` | Listen address |
-| `DB_DRIVER` | `sqlite` | `sqlite` or `postgres` |
-| `DB_DSN` | `data/manager.db` | SQLite file path or Postgres DSN |
-| `JWT_SECRET` | insecure dev value | Signs session tokens. **Set this.** |
-| `ENCRYPTION_KEY` | derived from `JWT_SECRET` | Encrypts stored secrets. Changing it makes them unreadable. |
-| `PROJECTS_ROOT` | `~/supabase-projects` (`/etc/supabase-manager/projects` in the image) | Where new projects are created |
-| `SUPABASE_BIN` | `supabase` | Supabase CLI binary |
-| `TOOLS_DIR` | `data/bin` | Where the manager installs Supabase CLI releases |
-| `SUPABASE_AUTO_INSTALL` | `true` | Install the latest CLI on startup when none is found |
-| `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker Engine socket |
-| `PORT_RANGE_START` | `54300` | Base of the first port block |
-| `PORT_BLOCK` | `100` | Size of each project's port block |
-| `INSPECTOR_PORT_START` | `8083` | First Edge Runtime inspector port |
-| `SECURE_COOKIES` | `false` | Set `true` when served over HTTPS |
-| `DEV_CORS_ORIGIN` | empty | Allowed origin if the UI is served from another host |
-| `UPDATE_REPOSITORY` | `izetmolla/supabase-manager` | Docker Hub repository checked for manager updates |
-| `SELF_CONTAINER` | detected | Name or ID of the manager's own container, if detection fails |
+
+| Variable                | Default                                                               | Description                                                   |
+| ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `ADDR`                  | `127.0.0.1:8080`                                                      | Listen address                                                |
+| `DB_DRIVER`             | `sqlite`                                                              | `sqlite` or `postgres`                                        |
+| `DB_DSN`                | `data/manager.db`                                                     | SQLite file path or Postgres DSN                              |
+| `JWT_SECRET`            | insecure dev value                                                    | Signs session tokens. **Set this.**                           |
+| `ENCRYPTION_KEY`        | derived from `JWT_SECRET`                                             | Encrypts stored secrets. Changing it makes them unreadable.   |
+| `PROJECTS_ROOT`         | `~/supabase-projects` (`/etc/supabase-manager/projects` in the image) | Where new projects are created                                |
+| `SUPABASE_BIN`          | `supabase`                                                            | Supabase CLI binary                                           |
+| `TOOLS_DIR`             | `data/bin`                                                            | Where the manager installs Supabase CLI releases              |
+| `SUPABASE_AUTO_INSTALL` | `true`                                                                | Install the latest CLI on startup when none is found          |
+| `DOCKER_SOCKET`         | `/var/run/docker.sock`                                                | Docker Engine socket                                          |
+| `PORT_RANGE_START`      | `54300`                                                               | Base of the first port block                                  |
+| `PORT_BLOCK`            | `100`                                                                 | Size of each project's port block                             |
+| `INSPECTOR_PORT_START`  | `8083`                                                                | First Edge Runtime inspector port                             |
+| `SECURE_COOKIES`        | `false`                                                               | Set `true` when served over HTTPS                             |
+| `DEV_CORS_ORIGIN`       | empty                                                                 | Allowed origin if the UI is served from another host          |
+| `UPDATE_REPOSITORY`     | `izetmolla/supabase-manager`                                          | Docker Hub repository checked for manager updates             |
+| `SELF_CONTAINER`        | detected                                                              | Name or ID of the manager's own container, if detection fails |
+| `PROXY_MANAGER_URL`     | derived from `ADDR` (`http://127.0.0.1:<port>`)                       | Where proxy instances forward ACME HTTP-01 requests and error pages |
+| `ACME_TLS_ALPN_ADDR`    | `127.0.0.1:5443`                                                      | Listen address of the TLS-ALPN-01 challenge solver            |
+| `PROXY_AGENT_ADDR`      | `127.0.0.1:7070`                                                      | gRPC listen address for proxy agents; a non-loopback address turns on TLS |
+| `PROXY_IMAGE_REPOSITORY`| `izetmolla/supabase-manager-proxy`                                    | Proxy image prefix (`-nginx` / `-traefik` is appended)        |
+| `PROXY_IMAGE_TAG`       | the manager's version (`latest` for development builds)               | Tag of the proxy images used by new instances                 |
+
+
+
 
 ### Port layout
 
 Project *n* gets `base = PORT_RANGE_START + n * PORT_BLOCK`:
 
-| Service | Port |
-| --- | --- |
-| Shadow DB | base + 20 |
+
+| Service    | Port      |
+| ---------- | --------- |
+| Shadow DB  | base + 20 |
 | API (Kong) | base + 21 |
-| Postgres | base + 22 |
-| Studio | base + 23 |
-| Mailpit | base + 24 |
-| Analytics | base + 27 |
-| Pooler | base + 29 |
+| Postgres   | base + 22 |
+| Studio     | base + 23 |
+| Mailpit    | base + 24 |
+| Analytics  | base + 27 |
+| Pooler     | base + 29 |
+
 
 Block 0 matches the stock Supabase defaults (54321, 54322, ...), so an existing default project
 imports cleanly.
@@ -291,11 +354,13 @@ imports cleanly.
 Every project's web services are also reachable through the manager, on its own address, and
 require a manager session:
 
-| URL | Upstream |
-| --- | --- |
-| `/proxy/<slug>/studio` | Redirects to `/project/<slug>`, where Studio is served |
-| `/proxy/<slug>/mail/` | Mailpit |
-| `/proxy/<slug>/api/` | API gateway (Kong): REST, Auth, Storage, Realtime WebSockets |
+
+| URL                    | Upstream                                                     |
+| ---------------------- | ------------------------------------------------------------ |
+| `/proxy/<slug>/studio` | Redirects to `/project/<slug>`, where Studio is served       |
+| `/proxy/<slug>/mail/`  | Mailpit                                                      |
+| `/proxy/<slug>/api/`   | API gateway (Kong): REST, Auth, Storage, Realtime WebSockets |
+
 
 Studio is built without a base path, so it cannot live under a prefix. It is served at the root
 instead, using the project slug as Studio's project ref (`/project/<slug>/editor`, ...). Its
@@ -322,11 +387,13 @@ releases while no project command is running.
 Each project has a **Network** page under Project Settings; new projects get the defaults from
 System settings. Changes apply on the next start.
 
-| Mode | Behaviour |
-| --- | --- |
+
+| Mode                                 | Behaviour                                                                                                                                                                                                                                                                        |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dedicated network (managed, default) | The manager creates `supabase_manager_<slug>` (or a name you choose) with your driver, subnet, gateway, IP range, MTU, IPv6 and driver options, and runs the CLI with `--network-id`. The network is recreated when its settings change and removed when the project is deleted. |
-| Supabase CLI default | The CLI creates `supabase_network_<project_id>`. Ports use the Docker daemon's default bind address, normally `0.0.0.0`. Imported projects start in this mode. |
-| Existing Docker network | Join a network you manage yourself, for example a `macvlan` network or one shared with a reverse proxy. |
+| Supabase CLI default                 | The CLI creates `supabase_network_<project_id>`. Ports use the Docker daemon's default bind address, normally `0.0.0.0`. Imported projects start in this mode.                                                                                                                   |
+| Existing Docker network              | Join a network you manage yourself, for example a `macvlan` network or one shared with a reverse proxy.                                                                                                                                                                          |
+
 
 The bind address (bridge networks) decides where ports are published: `127.0.0.1` for this
 machine only, or `0.0.0.0` for all interfaces. Other addresses are rejected because the Supabase
@@ -342,12 +409,16 @@ Two projects can never share a network: Supabase containers use fixed DNS names 
 
 The driver is picked from the drivers the Docker daemon reports:
 
-| Driver | Notes |
-| --- | --- |
-| `bridge` (recommended) | Bind address, host bridge interface name and IP masquerading (outbound internet) can be set. |
-| `overlay` | Only offered while Docker Swarm is active; created as attachable, optionally encrypted. |
-| `macvlan`, `ipvlan` | Not available for managed networks: they publish no ports, which the CLI and the manager need. Use "Existing Docker network" if you know what you are doing. |
-| Plugins / other | Any installed network plugin; options are passed through as-is. |
+
+| Driver                 | Notes                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bridge` (recommended) | Bind address, host bridge interface name and IP masquerading (outbound internet) can be set.                                                                 |
+| `overlay`              | Only offered while Docker Swarm is active; created as attachable, optionally encrypted.                                                                      |
+| `macvlan`, `ipvlan`    | Not available for managed networks: they publish no ports, which the CLI and the manager need. Use "Existing Docker network" if you know what you are doing. |
+| Plugins / other        | Any installed network plugin; options are passed through as-is.                                                                                              |
+
+
+
 
 ### Storage (persistent data)
 
@@ -355,12 +426,14 @@ The **Storage** page under Project Settings decides where the database
 (`supabase_db_<project_id>`, `/var/lib/postgresql/data`) and the uploaded files
 (`supabase_storage_<project_id>`, `/mnt`) are kept. New projects get the defaults from System settings.
 
-| Mode | Location |
-| --- | --- |
-| Docker volumes (default) | Named volumes in Docker's data root (`/var/lib/docker/volumes/...`). |
-| Host folder | `<folder>/<slug>/db` and `<folder>/<slug>/storage` on the host (default `<project>/volumes`). The folder must exist at that path for the Docker daemon. |
-| NFS share | `<server>:<export>/<slug>/{db,storage}`, mounted by Docker (default options `rw,nfsvers=4`). |
-| Volume driver | Any volume driver with options; `{project}` and `{volume}` are replaced, e.g. CIFS via the `local` driver with `device=//nas/share/{project}/{volume}`. |
+
+| Mode                     | Location                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker volumes (default) | Named volumes in Docker's data root (`/var/lib/docker/volumes/...`).                                                                                    |
+| Host folder              | `<folder>/<slug>/db` and `<folder>/<slug>/storage` on the host (default `<project>/volumes`). The folder must exist at that path for the Docker daemon. |
+| NFS share                | `<server>:<export>/<slug>/{db,storage}`, mounted by Docker (default options `rw,nfsvers=4`).                                                            |
+| Volume driver            | Any volume driver with options; `{project}` and `{volume}` are replaced, e.g. CIFS via the `local` driver with `device=//nas/share/{project}/{volume}`. |
+
 
 Volumes are created before `supabase start`. When the location of an existing volume changes, the
 data is copied to the new location on the next start (the original stays until the copy
@@ -373,12 +446,69 @@ volumes is deleted, data in host folders or on NFS stays where it is.
 with its driver, location, users and optional size. Mounts on manager-controlled custom storage are
 highlighted and can be filtered.
 
+### Proxy Manager
+
+**Proxy Manager** (left rail, admins only) publishes domains through nginx or Traefik. It is off by
+default: an admin turns it on under **System settings → Proxy Manager**. Turning it off stops every
+proxy container and the background work (agent server, health checks, certificate renewal) and
+hides the UI; the configuration is kept, and the deployed instances start again when it is turned
+back on.
+
+The manager stores the configuration and renders it for each proxy instance. Each instance is a
+container the manager creates with Docker from the proxy images
+(`izetmolla/supabase-manager-proxy-nginx` and `-traefik`, published with every manager release).
+They are the official nginx and Traefik images plus `sm-proxy-agent` (`services/proxy-agent`),
+which runs as the container's main process: it supervises the proxy, connects back to the manager
+over gRPC (`PROXY_AGENT_ADDR`, protocol in `shared/proxyagent/v1`), and receives configurations,
+validates them in place, switches to them, reloads the proxy and reports status and access logs.
+Each agent authenticates with a per-instance token passed in the container environment; when the
+manager listens beyond loopback the connection uses TLS with a pinned, self-signed certificate.
+Instances still on the plain `nginx` / `traefik` images are moved to the proxy images on startup.
+
+- **Instances** run on the host network, each with its own bind IP and ports. A host can be served
+by several instances. Instance pages show whether the agent is connected and whether the live
+configuration matches the deployed revision; a container that comes back with a different
+configuration is resynced automatically.
+- **Hosts** map domains to an upstream, with path and header routes, strip-prefix and regex
+rewrites, WebSockets, timeouts, body limits, redirects, error pages, request/response headers,
+CORS, HSTS, forced HTTPS, IP rules, rate limits and raw nginx/Traefik snippets.
+- **Upstreams** are `host:port` targets or project services picked from a list (Kong, Studio,
+Postgres, ...), with round robin, least connections or IP hash, weights, backup targets, sticky
+sessions and health checks. **Streams** forward raw TCP/UDP ports.
+- **Access lists** combine basic-auth users (stored as `$apr1$` hashes) with IP allow and deny
+rules; host IP rules are checked first and always apply.
+- **Certificates** are issued by the manager with [lego](https://go-acme.github.io/lego/):
+HTTP-01 (forwarded by the proxies to the manager), TLS-ALPN-01 (nginx only) or DNS-01 with
+Cloudflare or any other lego provider. Let's Encrypt (production and staging), ZeroSSL, Buypass,
+Google Trust Services and custom ACME directories (with EAB) are supported, and certificates can
+also be uploaded. They are
+renewed 30 days before expiry, then deployed to the instances that use them.
+
+Changes are drafts until deployed. **Deploy** shows a diff per instance and sends the new
+configuration to the agent, which validates it (`nginx -t` on a staging copy; for Traefik, the
+errors in its API after the file provider reloads), applies it, and restores the previous
+configuration if the proxy rejects it. Every deploy is
+kept as a revision that can be previewed and rolled back. Instance pages show status, container
+logs, live access logs per host and upstream health; certificates close to expiry are flagged.
+
+Traefik limitations (shown as warnings in the preview): no IP deny rules, access lists always
+require both the IP match and the password, no least-connections or IP-hash balancing (weighted
+round robin and a sticky cookie are used), and no TLS-ALPN-01.
+
+Ports used by the proxies are listed in [docs/PORTS.md](docs/PORTS.md).
+
 ## Security notes
 
 - Keep `ADDR` on `127.0.0.1`. To reach it remotely, use an SSH tunnel
-  (`ssh -L 8080:127.0.0.1:8080 host`) or a TLS reverse proxy with `SECURE_COOKIES=true`.
+(`ssh -L 8080:127.0.0.1:8080 host`) or a TLS reverse proxy with `SECURE_COOKIES=true`.
 - Anyone who can use the manager can control Docker on the host. Only give accounts to trusted people.
 - Back up `data/manager.db` (or your Postgres database) together with `ENCRYPTION_KEY`.
+
+## Author
+
+Supabase Manager is created and maintained by **Izet Molla**: [izetmolla@gmail.com](mailto:izetmolla@gmail.com).
+
+
 
 ## Notes for sandboxed environments
 
@@ -388,3 +518,4 @@ If `/tmp` is mounted `noexec`, point Go and npm elsewhere:
 export GOTMPDIR=$HOME/.cache/gotmp && mkdir -p $GOTMPDIR
 export NPM_CONFIG_CACHE=$HOME/.npm-cache
 ```
+

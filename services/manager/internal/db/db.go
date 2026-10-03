@@ -8,6 +8,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/supabase-manager/manager/config"
 	"github.com/supabase-manager/manager/internal/models"
+	proxymanager "github.com/supabase-manager/manager/internal/proxy-manager"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -38,7 +39,7 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 			sqlDB.SetMaxOpenConns(1)
 		}
 	}
-	if err := gdb.AutoMigrate(models.All()...); err != nil {
+	if err := gdb.AutoMigrate(append(models.All(), proxymanager.Models()...)...); err != nil {
 		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
 	return gdb, nil

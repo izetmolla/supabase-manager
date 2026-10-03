@@ -9,13 +9,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/supabase-manager/manager/internal/auth"
 	"github.com/supabase-manager/manager/config"
+	"github.com/supabase-manager/manager/internal/auth"
 	"github.com/supabase-manager/manager/internal/db"
 	"github.com/supabase-manager/manager/internal/docker"
 	httpapi "github.com/supabase-manager/manager/internal/http"
 	"github.com/supabase-manager/manager/internal/models"
 	"github.com/supabase-manager/manager/internal/projects"
+	proxymanager "github.com/supabase-manager/manager/internal/proxy-manager"
 	"github.com/supabase-manager/manager/internal/selfupdate"
 	"github.com/supabase-manager/manager/internal/settings"
 	"github.com/supabase-manager/manager/internal/supabase"
@@ -48,11 +49,21 @@ func main() {
 	cli := supabase.NewCLIManager(runner, cfg.SupabaseBin, cfg.ToolsDir, st, settings.KeyCLI)
 	ps := projects.NewService(cfg, gdb, runner, dc, st, cipher)
 	up := selfupdate.New(dc, cfg.UpdateRepository, version.Version, version.CommitSHA, cfg.DockerSocket, cfg.SelfContainer)
-	srv := httpapi.New(cfg, gdb, auth.NewService(gdb, cfg.JWTSecret), ps, cli, up)
+	managerURL := cfg.ProxyManagerURL
+	if managerURL == "" {
+		managerURL = proxymanager.ManagerURLFromAddr(cfg.Addr)
+	}
+	pm := proxymanager.New(gdb, dc, cipher, ps, runner, st, proxymanager.Options{
+		ManagerURL: managerURL, ALPNAddr: cfg.ACMETLSALPNAddr, ManagerAddr: cfg.Addr,
+		AgentAddr: cfg.ProxyAgentAddr, ImageRepository: cfg.ProxyImageRepository,
+		ImageTag: proxymanager.ImageTag(cfg.ProxyImageTag, version.Version),
+	})
+	srv := httpapi.New(cfg, gdb, auth.NewService(gdb, cfg.JWTSecret), ps, cli, up, pm)
 
 	bg, stopBG := context.WithCancel(context.Background())
 	defer stopBG()
 	go cli.Run(bg, cfg.CLIAutoInstall)
+	go pm.Run(bg)
 
 	ui, err := fs.Sub(web.Dist, "dist")
 	if err != nil {

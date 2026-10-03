@@ -11,7 +11,8 @@
 	compose-up compose-down \
 	k8s-apply \
 	version bump-patch bump-minor bump-major release-patch release-minor release-major release \
-	release-next next
+	release-next next proto proto-tools test-integration proxy-images proxy-images-publish \
+	frontend-check check deploy-all deploy-all-next deploy-all-run
 
 GO_MODULES_SCRIPT := ./script/go-modules.sh
 UPGRADE_GO_SCRIPT := ./script/upgrade-go.sh
@@ -46,6 +47,12 @@ DOCKER_PLATFORM      ?= linux/amd64
 NAMESPACE            ?= supabase-manager
 SUPABASE_CLI_VERSION ?= 2.119.0
 service              ?= $(SERVICE)
+
+# Code generators for make proto (installed into $(GOBIN) when missing).
+GOBIN                      := $(shell go env GOPATH 2>/dev/null)/bin
+BUF_VERSION                ?= v1.73.0
+PROTOC_GEN_GO_VERSION      ?= v1.36.12
+PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.2
 
 # Runtime (docker-up / compose)
 IMAGE         ?= $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-$(SERVICE):$(DOCKER_TAG)
@@ -92,6 +99,11 @@ help:
 	@echo "  make release-patch|minor|major        Bump, tag, build + push the image, push the git tag"
 	@echo "  make release next                     update, fix, tidy, vet, lint, commit, then release-patch"
 	@echo "  make release V=1.4.0                  Same with an explicit version"
+	@echo "  make deploy-all                       Build and push every image (+ proxy images) at the current version, no new tag"
+	@echo "  make deploy-all next                  update, fix, fmt, tidy, proto, vet, lint, tests, build, integration tests,"
+	@echo "                                        commit, then release-patch every service (images + proxy images to Docker Hub)"
+	@echo "  make deploy-all V=1.4.0               Same with an explicit version (SKIP_INTEGRATION=1 skips the Docker tests)"
+	@echo "  make check                            vet, lint, test and the frontend lint/typecheck"
 	@echo "  make bump-patch|minor|major           Bump and push the git tag only (no image)"
 	@echo ""
 	@echo "Container operations:"
@@ -180,6 +192,31 @@ lint: $(UI_DIST)/index.html
 test: $(UI_DIST)/index.html
 	go test $(addsuffix /...,$(addprefix ./,$(shell go list -m -f '{{.Dir}}' | sed 's|^$(CURDIR)/||')))
 
+## proto-tools: install buf, protoc-gen-go and protoc-gen-go-grpc when missing
+proto-tools:
+	@test -x "$(GOBIN)/buf" || go install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+	@test -x "$(GOBIN)/protoc-gen-go" || go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+	@test -x "$(GOBIN)/protoc-gen-go-grpc" || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
+
+## proto: lint the proto files and regenerate the proxy agent gRPC code
+proto: proto-tools
+	cd shared/proxyagent && PATH="$$(go env GOPATH)/bin:$$PATH" buf lint && PATH="$$(go env GOPATH)/bin:$$PATH" buf generate
+
+## test-integration: nginx -t / Traefik on rendered configs and the proxy images end to end (needs Docker)
+test-integration:
+	go test -tags integration -count=1 ./services/manager/internal/proxy-manager/...
+
+## frontend-check: oxlint and TypeScript over the frontend workspace
+frontend-check: $(FRONTEND_DIR)/node_modules/.modules.yaml
+	cd $(FRONTEND_DIR) && pnpm lint && pnpm typecheck
+
+## check: every static check and unit test (Go and frontend)
+check:
+	@$(MAKE) --no-print-directory vet
+	@$(MAKE) --no-print-directory lint
+	@$(MAKE) --no-print-directory test
+	@$(MAKE) --no-print-directory frontend-check
+
 ## upgrade: Fetch latest Go from go.dev and update go.mod, go.work, Dockerfiles
 upgrade:
 	@$(UPGRADE_GO_SCRIPT)
@@ -235,6 +272,14 @@ docker-build-all:
 docker-publish:
 	@$(DOCKER_ENV) ./script/docker-publish.sh $(service)
 
+## proxy-images: build the Proxy Manager images (nginx and Traefik with sm-proxy-agent)
+proxy-images:
+	@$(DOCKER_ENV) ./script/docker-proxy-images.sh build
+
+## proxy-images-publish: build and push the Proxy Manager images
+proxy-images-publish:
+	@$(DOCKER_ENV) ./script/docker-proxy-images.sh publish
+
 docker-deploy:
 	@$(DOCKER_ENV) NAMESPACE=$(NAMESPACE) ./script/docker-deploy.sh $(service)
 
@@ -263,7 +308,7 @@ else
 	@$(DOCKER_ENV) ./script/release.sh $(V) $(service)
 endif
 
-# Only meaningful as "make release next".
+# Only meaningful as "make release next" or "make deploy-all next".
 next:
 	@:
 
@@ -286,6 +331,61 @@ release-next:
 		git add -A -- . && git commit -q -m "chore(release): update dependencies and apply go fix"; \
 	fi
 	@$(DOCKER_ENV) ./script/release.sh patch $(service)
+
+# make deploy-all: build and push every image at the current version (no checks, no new tag)
+# make deploy-all next | make deploy-all V=1.4.0: full pipeline and a new release
+deploy-all:
+ifneq ($(filter next,$(MAKECMDGOALS)),)
+	@$(MAKE) --no-print-directory deploy-all-run BUMP=patch
+else ifneq ($(V),)
+	@$(MAKE) --no-print-directory deploy-all-run BUMP=$(V)
+else
+	@docker info >/dev/null 2>&1 || (echo "Error: the Docker daemon is not reachable" >&2; exit 1)
+	@echo "==> Building and publishing $(DOCKER_SERVICES) at version $$(bash -c 'source ./script/docker-common.sh && resolve_service_version manager "$$PWD"')"
+	@for s in $(DOCKER_SERVICES); do $(DOCKER_ENV) ./script/docker-publish.sh $$s || exit 1; done
+endif
+
+deploy-all-next:
+	@$(MAKE) --no-print-directory deploy-all-run BUMP=patch
+
+# Full pipeline: checks that may rewrite the tree, checks that must pass, builds, integration
+# tests against Docker, a commit of what the checks changed, then a release of every service
+# (git tag, images and the Proxy Manager images pushed to Docker Hub, tag pushed to GIT_REMOTE).
+deploy-all-run:
+	@test -n "$(BUMP)" || (echo "Error: BUMP is not set; use make deploy-all next" >&2; exit 1)
+	@if [ "$(ALLOW_DIRTY)" != "1" ] && [ -n "$$(git status --porcelain -- .)" ]; then \
+		echo "Error: uncommitted changes; commit them before 'make deploy-all' (or ALLOW_DIRTY=1)" >&2; \
+		git status --short -- . | head -n 20 >&2; exit 1; \
+	fi
+	@docker info >/dev/null 2>&1 || (echo "Error: the Docker daemon is not reachable" >&2; exit 1)
+	@if [ "$(PUSH_TAG)" != "0" ] && ! git remote get-url "$(or $(GIT_REMOTE),origin)" >/dev/null 2>&1; then \
+		echo "Error: git remote '$(or $(GIT_REMOTE),origin)' not found (set GIT_REMOTE or PUSH_TAG=0)" >&2; exit 1; \
+	fi
+	@echo "==> [1/6] Update and rewrite: update, fix, fmt, tidy, proto"
+	@$(MAKE) --no-print-directory update
+	@$(MAKE) --no-print-directory fix
+	@$(MAKE) --no-print-directory fmt
+	@$(MAKE) --no-print-directory tidy
+	@$(MAKE) --no-print-directory proto
+	@echo "==> [2/6] Checks: vet, lint, test, frontend lint and typecheck"
+	@$(MAKE) --no-print-directory check
+	@echo "==> [3/6] Build: UI and binary"
+	@$(MAKE) --no-print-directory build
+	@if [ "$(SKIP_INTEGRATION)" = "1" ]; then \
+		echo "==> [4/6] Integration tests skipped (SKIP_INTEGRATION=1)"; \
+	else \
+		echo "==> [4/6] Integration tests: proxy images and Docker"; \
+		$(MAKE) --no-print-directory proxy-images && $(MAKE) --no-print-directory test-integration || exit 1; \
+	fi
+	@if [ "$(ALLOW_DIRTY)" != "1" ] && [ -n "$$(git status --porcelain -- .)" ]; then \
+		echo "==> [5/6] Committing changes from the checks"; \
+		git status --short -- .; \
+		git add -A -- . && git commit -q -m "chore(release): update dependencies, regenerate code and apply go fix"; \
+	else \
+		echo "==> [5/6] Nothing to commit"; \
+	fi
+	@echo "==> [6/6] Release and publish: $(DOCKER_SERVICES) ($(BUMP))"
+	@for s in $(DOCKER_SERVICES); do $(DOCKER_ENV) ./script/release.sh $(BUMP) $$s || exit 1; done
 
 # ==============================================================================
 # CONTAINER OPERATIONS

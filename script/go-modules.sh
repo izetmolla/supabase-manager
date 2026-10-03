@@ -86,7 +86,7 @@ section_of() {
 
 has_go_sources() {
 	local mod="$1"
-	find "$ROOT/$mod" -name '*.go' -not -path '*/vendor/*' 2>/dev/null | grep -q .
+	find "$ROOT/$mod" -name '*.go' -not -path '*/vendor/*' -print -quit 2>/dev/null | grep -q .
 }
 
 list_modules() {

@@ -17,6 +17,8 @@ import { api, errorMessage } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import type { CLIInfo, ManagerUpdateInfo, NetworkDefaults, StorageConfig } from '@/lib/types'
 import { timeAgo } from '@/lib/format'
+import { AUTHOR_EMAIL, AUTHOR_MAILTO, AUTHOR_NAME } from '@/lib/author'
+import { useProxyManagerSettings, type ProxyManagerSettings } from '@/hooks/use-proxy-manager'
 
 const sourceLabel: Record<string, string> = {
   managed: 'Installed by the manager',
@@ -474,15 +476,89 @@ function StorageDefaultsSection() {
   )
 }
 
+function ProxyManagerSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useProxyManagerSettings()
+  const [confirmOff, setConfirmOff] = useState(false)
+  const save = useMutation({
+    mutationFn: (enabled: boolean) => api.put<ProxyManagerSettings>('/system/proxy-manager', { enabled }),
+    onSuccess: (d) => {
+      qc.setQueryData(['system', 'proxy-manager'], d)
+      qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success(d.enabled ? 'Proxy Manager enabled' : 'Proxy Manager disabled')
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+
+  if (isLoading || !data) return <Skeleton className="h-28" />
+  return (
+    <Section
+      title="Proxy Manager"
+      description="Run nginx or Traefik proxy containers on this host and publish domains with TLS certificates. Off by default."
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="text-sm">
+          <div className="flex items-center gap-2 font-medium">
+            Enable Proxy Manager
+            <Badge variant={data.enabled ? 'default' : 'secondary'}>{data.enabled ? 'On' : 'Off'}</Badge>
+          </div>
+          <p className="text-muted-foreground mt-1">
+            {data.enabled ? (
+              <>
+                Manage it under{' '}
+                <Link to="/proxy-manager" className="underline underline-offset-2">
+                  Proxy Manager
+                </Link>
+                . Turning it off stops every proxy container; the configuration is kept.
+              </>
+            ) : (
+              'Adds Proxy Manager to the sidebar. Proxies deployed before start again when it is turned on.'
+            )}
+          </p>
+        </div>
+        <Switch
+          checked={data.enabled}
+          disabled={save.isPending}
+          onCheckedChange={(on) => (on ? save.mutate(true) : setConfirmOff(true))}
+        />
+      </div>
+      <ConfirmDialog
+        open={confirmOff}
+        onOpenChange={setConfirmOff}
+        title="Disable Proxy Manager?"
+        description="Every proxy container is stopped, so the domains they serve go offline. Certificate renewal and health checks pause. Hosts, certificates and revisions are kept and come back when you enable it again."
+        confirmText="Disable and stop proxies"
+        onConfirm={async () => {
+          await save.mutateAsync(false)
+        }}
+      />
+    </Section>
+  )
+}
+
 export function SystemPage() {
   return (
     <PageContainer>
-      <PageHeader title="System" description="Manager and Supabase CLI versions, and how new projects are networked and stored." />
+      <PageHeader
+        title="System"
+        description="Manager and Supabase CLI versions, optional features, and how new projects are networked and stored."
+      />
       <div className="grid gap-6">
         <ManagerUpdateSection />
         <CLISection />
+        <ProxyManagerSection />
         <NetworkDefaultsSection />
         <StorageDefaultsSection />
+        <Section title="About" description="Who builds and maintains Supabase Manager.">
+          <div className="grid gap-1 text-sm">
+            <p>
+              Created by <span className="font-medium">{AUTHOR_NAME}</span>
+            </p>
+            <a href={AUTHOR_MAILTO} className="text-muted-foreground hover:text-foreground w-fit underline underline-offset-4">
+              {AUTHOR_EMAIL}
+            </a>
+          </div>
+        </Section>
       </div>
     </PageContainer>
   )

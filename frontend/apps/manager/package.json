@@ -2,6 +2,7 @@
   "name": "manager",
   "private": true,
   "version": "0.0.0",
+  "author": "Izet Molla <izetmolla@gmail.com>",
   "type": "module",
   "scripts": {
     "dev": "vite",
