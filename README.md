@@ -22,8 +22,14 @@ The [installer](https://github.com/izetmolla/supabase-manager/blob/main/script/i
 prepares the projects folder and data volume, starts the container and waits until it is healthy.
 Then open the printed URL and create the first admin account.
 
-By default it listens on `127.0.0.1:8080` (reach it through an SSH tunnel). Settings are passed as
-environment variables and saved to `/etc/supabase-manager/install.env`:
+Run from a terminal, the installer asks where the panel listens (`127.0.0.1`, `0.0.0.0` or a
+specific IP), on which port, and whether to enable the Proxy Manager (nginx or Traefik, with its
+HTTP and HTTPS ports). Pressing Enter keeps the default shown in brackets. Re-run the questions
+later with `bash -s configure`.
+
+By default it listens on `127.0.0.1:8080` (reach it through an SSH tunnel). Settings can also be
+passed as environment variables (those are not asked; `NONINTERACTIVE=1` skips every question) and
+are saved to `/etc/supabase-manager/install.env`:
 
 ```bash
 # expose on all interfaces and store projects elsewhere
@@ -36,7 +42,9 @@ curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/scr
 curl -fsSL https://raw.githubusercontent.com/izetmolla/supabase-manager/main/script/install.sh | sudo bash -s uninstall
 ```
 
-Other options: `VERSION` (image tag), `PUID` / `PGID`, `TZ`, `SECURE_COOKIES`.
+Other options: `VERSION` (image tag), `PUID` / `PGID`, `TZ`, `SECURE_COOKIES`,
+`PROXY_MANAGER_ENABLE`, `PROXY_MANAGER_KIND`, `PROXY_HTTP_PORT`, `PROXY_HTTPS_PORT`. The Proxy
+Manager choice applies on the first start only; afterwards it is managed in the panel.
 
 Running more than one Supabase project on a server usually means juggling `supabase start` in
 several folders, port clashes, hand-edited `config.toml` files and a Studio per project. Supabase

@@ -78,7 +78,7 @@ func (s *Service) imageRepository(kind string) string {
 // onDockerHub reports whether repo has no registry host, i.e. lives on Docker Hub.
 func onDockerHub(repo string) bool {
 	first, _, ok := strings.Cut(repo, "/")
-	return !ok || !(strings.ContainsAny(first, ".:") || first == "localhost")
+	return !ok || (!strings.ContainsAny(first, ".:") && first != "localhost")
 }
 
 func fetchHubTags(ctx context.Context, repo string, refresh bool) ([]hubTag, error) {

@@ -30,7 +30,7 @@ func (s *Service) SMTPDefaults() configtoml.SMTP {
 }
 
 func (s *Service) storedSMTP() storedSMTP {
-	st := storedSMTP{SMTP: configtoml.SMTP{Port: 587, EmailsPerHour: 100}}
+	st := storedSMTP{Port: 587, EmailsPerHour: 100}
 	_, _ = s.Settings.Get(settings.KeySMTPDefaults, &st)
 	return st
 }
