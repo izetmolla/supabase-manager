@@ -1,0 +1,25 @@
+# Environment files containing secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data / backups
+data/
+backups/
+*.db
+
+# Build output
+bin/
+tmp/
+services/*/tmp
+services/*/bin
+services/*/web/dist/
+build-errors.log
+
+# Frontend
+frontend/node_modules/
+frontend/**/node_modules/
+.pnpm-store/
+
+# test coverage
+coverage.out

@@ -1,0 +1,38 @@
+# VCS / editor
+.git
+.gitignore
+.idea
+.vscode
+.cursor
+*.swp
+*~
+.DS_Store
+
+# Secrets — never send into build context
+.env
+.env.*
+!.env.example
+
+# Local only
+.dockerignore
+.air.toml
+.golangci.yml
+Makefile
+compose.yaml
+*.md
+script
+k8s
+docs
+data
+backups
+bin
+tmp
+
+# Rebuilt inside the image
+**/node_modules
+**/dist
+**/tmp
+**/bin
+**/*.test
+**/coverage.out
+.pnpm-store

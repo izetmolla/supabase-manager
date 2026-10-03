@@ -1,0 +1,106 @@
+# Supabase Manager — single service (API + embedded UI), no gateway.
+# kubectl apply -f k8s/general.yaml -f k8s/manager.yaml   (or: make k8s-apply)
+#
+# The manager drives the node's Docker daemon (like `docker run --network host -v /var/run/docker.sock`):
+#  - hostNetwork: it proxies to project ports on 127.0.0.1 and probes free ports on the node
+#  - docker.sock: creates the Supabase containers, networks and volumes as siblings on the node
+#  - PROJECTS_ROOT is mounted at the same path because the Supabase CLI passes it to the daemon
+# Pin it to one node (nodeSelector) and keep replicas at 1.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: supabase-manager-data
+  namespace: supabase-manager
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-manager
+  namespace: supabase-manager
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: supabase-manager
+  template:
+    metadata:
+      labels:
+        app: supabase-manager
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      # nodeSelector:
+      #   kubernetes.io/hostname: my-docker-node
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        # Group id of /var/run/docker.sock on the node (stat -c %g /var/run/docker.sock).
+        supplementalGroups: [999]
+      initContainers:
+        # hostPath DirectoryOrCreate makes the folder root-owned; hand its top level to the app user.
+        - name: prepare-projects
+          image: alpine:3
+          command: ["sh", "-c", "chown 1000:1000 /etc/supabase-manager/projects && chmod 0755 /etc/supabase-manager/projects"]
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: projects
+              mountPath: /etc/supabase-manager/projects
+      containers:
+        - name: manager
+          image: izetmolla/supabase-manager:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: ADDR
+              value: "127.0.0.1:8080"
+            - name: PROJECTS_ROOT
+              value: "/etc/supabase-manager/projects"
+            - name: SECURE_COOKIES
+              value: "false"
+            - name: TZ
+              value: "UTC"
+          readinessProbe:
+            httpGet:
+              host: 127.0.0.1
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              host: 127.0.0.1
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: projects
+              mountPath: /etc/supabase-manager/projects
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: supabase-manager-data
+        - name: projects
+          hostPath:
+            path: /etc/supabase-manager/projects
+            type: DirectoryOrCreate
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket

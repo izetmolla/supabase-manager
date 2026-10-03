@@ -1,0 +1,56 @@
+# PUID=$(id -u) PGID=$(id -g) DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose up -d --build
+# (or: make compose-up)
+#
+# PROJECTS_ROOT (default /etc/supabase-manager/projects) is mounted at the same path inside and
+# outside the container because the Supabase CLI passes these paths to the Docker daemon as
+# bind-mount sources. The `prepare` service creates it on the host and hands it, and the data
+# volume, to PUID:PGID before the manager starts.
+name: supabase-manager
+
+services:
+  prepare:
+    image: alpine:3
+    user: "0:0"
+    # Only the top level of PROJECTS_ROOT is chowned: project folders may hold database files
+    # owned by container users (host-folder storage).
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p /data/home /data/bin &&
+        chown -R ${PUID:-1000}:${PGID:-1000} /data &&
+        chown ${PUID:-1000}:${PGID:-1000} /projects &&
+        chmod 0755 /projects
+    volumes:
+      - data:/data
+      - ${PROJECTS_ROOT:-/etc/supabase-manager/projects}:/projects
+
+  manager:
+    build:
+      context: .
+      dockerfile: services/manager/Dockerfile
+    image: izetmolla/supabase-manager:latest
+    container_name: supabase-manager
+    restart: unless-stopped
+    init: true
+    depends_on:
+      prepare:
+        condition: service_completed_successfully
+    # The manager proxies to project ports on 127.0.0.1 and probes free ports on the host.
+    network_mode: host
+    user: "${PUID:-1000}:${PGID:-1000}"
+    group_add:
+      - "${DOCKER_GID:-999}"
+    environment:
+      ADDR: ${ADDR:-127.0.0.1:8080}
+      PROJECTS_ROOT: ${PROJECTS_ROOT:-/etc/supabase-manager/projects}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - data:/data
+      - ${PROJECTS_ROOT:-/etc/supabase-manager/projects}:${PROJECTS_ROOT:-/etc/supabase-manager/projects}
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+
+volumes:
+  data:
+    name: supabase-manager-data

@@ -1,0 +1,22 @@
+{
+  "name": "frontend",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter manager build",
+    "dev": "pnpm --filter manager dev",
+    "dev:manager": "pnpm --filter manager dev",
+    "lint": "pnpm -r --if-present lint",
+    "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.9",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "typescript": "~6.0.2"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24"
+  }
+}
