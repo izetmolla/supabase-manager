@@ -1,15 +1,37 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/source-code-pro";
 
 @custom-variant dark (&:is(.dark *));
 @source "../**/*.{ts,tsx}";
 @source "../../../../apps/*/src/**/*.{ts,tsx}";
 
+/* Type scale and fonts of Supabase Studio. */
+@theme {
+    --text-xs: 12px;
+    --text-xs--line-height: 16px;
+    --text-sm: 13px;
+    --text-sm--line-height: 1.4286;
+    --text-base: 15px;
+    --text-base--line-height: 1.5;
+    --text-lg: 16px;
+    --text-lg--line-height: 1.5556;
+    --text-xl: 18px;
+    --text-xl--line-height: 1.4;
+    --text-2xl: 22px;
+    --text-2xl--line-height: 1.3333;
+    --text-3xl: 28px;
+    --text-3xl--line-height: 1.2;
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Inter Variable', system-ui, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-mono: 'Source Code Pro Variable', 'Office Code Pro', Menlo, monospace;
+    --color-foreground-light: var(--foreground-light);
+    --color-foreground-lighter: var(--foreground-lighter);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -54,6 +76,8 @@
 :root {
     --background: #fcfcfc;
     --foreground: #171717;
+    --foreground-light: #525252;
+    --foreground-lighter: #707070;
     --card: #ffffff;
     --card-foreground: #171717;
     --popover: #ffffff;
@@ -87,38 +111,41 @@
     --brand: #3ecf8e;
 }
 
+/* Resolved values of Supabase Studio's dark theme (hue 157.5). */
 .dark {
-    --background: #1c1c1c;
-    --foreground: #ededed;
-    --card: #232323;
-    --card-foreground: #ededed;
-    --popover: #232323;
-    --popover-foreground: #ededed;
+    --background: oklch(0.19 0.0025 157.5);
+    --foreground: oklch(0.95 0.00275 157.5);
+    --foreground-light: oklch(0.798 0.00275 157.5);
+    --foreground-lighter: oklch(0.684 0.00275 157.5);
+    --card: oklch(0.215 0.0025 157.5);
+    --card-foreground: oklch(0.95 0.00275 157.5);
+    --popover: oklch(0.24 0.0025 157.5);
+    --popover-foreground: oklch(0.95 0.00275 157.5);
     --primary: #3ecf8e;
     --primary-foreground: #0b2e1e;
-    --secondary: #2a2a2a;
-    --secondary-foreground: #ededed;
-    --muted: #2a2a2a;
-    --muted-foreground: #a0a0a0;
-    --accent: #2e2e2e;
-    --accent-foreground: #ededed;
+    --secondary: oklch(0.24 0.0025 157.5);
+    --secondary-foreground: oklch(0.95 0.00275 157.5);
+    --muted: oklch(0.24 0.0025 157.5);
+    --muted-foreground: oklch(0.684 0.00275 157.5);
+    --accent: oklch(0.95 0.00275 157.5 / 0.0493);
+    --accent-foreground: oklch(0.95 0.00275 157.5);
     --destructive: #e5484d;
-    --border: #2e2e2e;
-    --input: #363636;
-    --ring: #3ecf8e;
+    --border: oklch(0.95 0.0015 157.5 / 0.075);
+    --input: oklch(0.95 0.0014 157.5 / 0.135);
+    --ring: oklch(0.76 0.15 157.5 / 55%);
     --chart-1: #3ecf8e;
     --chart-2: #34b27b;
     --chart-3: #2a9165;
     --chart-4: #20704e;
     --chart-5: #165038;
-    --sidebar: #171717;
-    --sidebar-foreground: #ededed;
+    --sidebar: oklch(0.19 0.0025 157.5);
+    --sidebar-foreground: oklch(0.95 0.00275 157.5);
     --sidebar-primary: #3ecf8e;
     --sidebar-primary-foreground: #0b2e1e;
-    --sidebar-accent: #2a2a2a;
-    --sidebar-accent-foreground: #ededed;
-    --sidebar-border: #2e2e2e;
-    --sidebar-ring: #3ecf8e;
+    --sidebar-accent: oklch(0.95 0.00275 157.5 / 0.0493);
+    --sidebar-accent-foreground: oklch(0.95 0.00275 157.5);
+    --sidebar-border: oklch(0.95 0.0015 157.5 / 0.075);
+    --sidebar-ring: oklch(0.76 0.15 157.5 / 55%);
     --brand: #3ecf8e;
 }
 
