@@ -1,40 +1,27 @@
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="Supabase Manager: run and manage all your Supabase environments from one simple panel" width="880">
+</p>
+
 # Supabase Manager
 
-A self-hosted control panel for running many local Supabase stacks on one machine. It wraps the
-Supabase CLI and Docker, so creating projects, assigning ports, configuring auth providers and
-running migrations happens in a Studio-like UI instead of by editing `config.toml` by hand.
+**Manage all your Supabase environments from one simple panel.**
 
-- **Backend**: Go, Fiber v3, GORM (SQLite or Postgres), JWT cookie auth
-- **Frontend**: Vite, React, TypeScript, Tailwind v4, shadcn/ui, embedded into the binary
+Running more than one Supabase project on a server usually means juggling `supabase start` in
+several folders, port clashes, hand-edited `config.toml` files and a Studio per project. Supabase
+Manager does that for you: create or import a project, press **Start**, and every environment is
+listed in one place with its status, logs, settings and Studio.
 
-Everything runs as **one service** (`services/manager`): the API, the UI and the project proxy are
-served from a single binary on a single port. The UI is compiled into the binary with `go:embed`,
-so nothing is loaded from a CDN, and there is no separate gateway.
+- **One place for every environment:** start, stop and restart projects, see their containers,
+  CPU, memory and live logs.
+- **No port juggling:** each project gets its own non-colliding port block and Docker network.
+- **Settings without editing files:** auth providers, services, ports, networking and storage are
+  forms; secrets are stored encrypted.
+- **One URL to remember:** each project's Studio, Mailpit and API are reached through the panel,
+  behind its login.
+- **Always up to date:** the Supabase CLI and the manager itself update from the panel.
 
-## Project structure
-
-```text
-.
-├── go.work                      # Go workspace: services/manager, services/version, shared
-├── Makefile                     # build, dev, modules, docker, k8s and container operations
-├── .air.toml                    # live reload for make run-<service>
-├── compose.yaml                 # docker compose (host network + docker socket)
-├── services/
-│   ├── manager/                 # the monolith service
-│   │   ├── cmd/                 # main.go (server) + cli.go (user / healthcheck subcommands)
-│   │   ├── config/              # environment configuration
-│   │   ├── internal/            # auth, db, docker, http, projects, supabase, settings, ...
-│   │   ├── web/                 # embed.go + dist/ (UI build output, embedded into the binary)
-│   │   └── Dockerfile           # UI (pnpm) → Go build → scratch runtime
-│   └── version/                 # build version, set via -ldflags
-├── shared/                      # Go helpers shared by services (envfile, ...)
-├── frontend/                    # pnpm workspace
-│   ├── apps/manager/            # the manager SPA (vite build → services/manager/web/dist)
-│   └── packages/ui/             # shadcn/ui components, cn(), globals.css (@workspace/ui)
-├── script/                      # docker-build/publish/deploy, run-service, go-modules, upgrade-go
-├── k8s/                         # namespace + deployment manifests
-└── docs/PORTS.md
-```
+It is one Docker container (or one binary) that drives the host's Docker, so it runs next to your
+existing setup.
 
 ## Features
 
@@ -189,6 +176,7 @@ and `:latest`. The version is stamped into the binary and shown in the panel.
 
 ```bash
 make version                            # current release, e.g. 1.4.0
+make release next                       # update, fix, tidy, vet, lint, commit the changes, then release-patch
 make release-patch                      # 1.4.0 -> 1.4.1: tag, build + push :1.4.1 and :latest, push the git tag
 make release-minor                      # 1.4.0 -> 1.5.0
 make release-major                      # 1.4.0 -> 2.0.0
@@ -216,6 +204,10 @@ This works with `docker run`, `make docker-up` and Docker Compose (the container
 Docker socket mounted). On Kubernetes the button is disabled; use `make docker-deploy`.
 
 ## Development
+
+The backend is Go (Fiber v3, GORM with SQLite or Postgres); the UI is Vite, React, Tailwind v4 and
+shadcn/ui. Both ship as one binary (`services/manager`): the UI is embedded with `go:embed`, so
+nothing is loaded from a CDN.
 
 ```bash
 make install-frontend      # pnpm install in frontend/

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState, type PointerEvent as ReactPointe
 import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { TopBar } from '@/components/layout/top-bar'
-import { IconRail } from '@/components/layout/icon-rail'
+import { AppRail, IconRail } from '@/components/layout/icon-rail'
 import { JobPanel } from '@/components/job-drawer'
 import { useAuth } from '@/hooks/use-auth'
 import { useProject, useProjectStatus, useSlug } from '@/hooks/use-projects'
@@ -33,12 +33,16 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
 }
 
 export function AppLayout() {
+  const { isAdmin } = useAuth()
   return (
     <div className="flex h-screen flex-col">
       <TopBar />
-      <main className="min-h-0 flex-1 overflow-auto">
-        <Outlet />
-      </main>
+      <div className="flex min-h-0 flex-1">
+        <AppRail isAdmin={isAdmin} />
+        <main className="min-w-0 flex-1 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
       <JobPanel />
     </div>
   )

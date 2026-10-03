@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="220" viewBox="0 0 880 220" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Supabase Manager</title>
+  <desc id="desc">The Supabase logo next to a control panel managing several Supabase projects.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="880" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1c1c1c"/>
+      <stop offset="1" stop-color="#121212"/>
+    </linearGradient>
+    <linearGradient id="logo-a" x1="53.974" y1="54.974" x2="94.163" y2="71.829" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#249361"/>
+      <stop offset="1" stop-color="#3ECF8E"/>
+    </linearGradient>
+    <linearGradient id="logo-b" x1="36.156" y1="30.578" x2="54.484" y2="65.081" gradientUnits="userSpaceOnUse">
+      <stop/>
+      <stop offset="1" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="880" height="220" rx="16" fill="url(#bg)"/>
+  <rect x="0.5" y="0.5" width="879" height="219" rx="15.5" stroke="#3ECF8E" stroke-opacity=".25"/>
+
+  <!-- Supabase logo -->
+  <g transform="translate(48 56) scale(0.95)">
+    <path d="M63.708 110.284c-2.86 3.601-8.658 1.628-8.727-2.97l-1.007-67.251h45.22c8.19 0 12.758 9.46 7.665 15.874l-43.151 54.347Z" fill="url(#logo-a)"/>
+    <path d="M63.708 110.284c-2.86 3.601-8.658 1.628-8.727-2.97l-1.007-67.251h45.22c8.19 0 12.758 9.46 7.665 15.874l-43.151 54.347Z" fill="url(#logo-b)" fill-opacity=".2"/>
+    <path d="M45.317 2.071c2.86-3.601 8.657-1.628 8.726 2.97l.442 67.251H9.83c-8.19 0-12.759-9.46-7.665-15.875L45.317 2.072Z" fill="#3ECF8E"/>
+  </g>
+
+  <!-- connector -->
+  <path d="M172 110h36" stroke="#3ECF8E" stroke-opacity=".6" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round"/>
+
+  <!-- control panel managing several projects -->
+  <g transform="translate(222 50)">
+    <rect x="0" y="0" width="150" height="120" rx="12" fill="#232323" stroke="#3a3a3a"/>
+    <rect x="0" y="0" width="150" height="24" rx="12" fill="#2a2a2a"/>
+    <rect x="0" y="12" width="150" height="12" fill="#2a2a2a"/>
+    <circle cx="16" cy="12" r="4" fill="#e5484d"/>
+    <circle cx="30" cy="12" r="4" fill="#f5a623"/>
+    <circle cx="44" cy="12" r="4" fill="#3ECF8E"/>
+    <!-- project rows: status dot, name bar, toggle -->
+    <g>
+      <circle cx="18" cy="44" r="4" fill="#3ECF8E"/>
+      <rect x="30" y="40" width="62" height="8" rx="4" fill="#4a4a4a"/>
+      <rect x="110" y="37" width="26" height="14" rx="7" fill="#3ECF8E"/>
+      <circle cx="129" cy="44" r="5" fill="#0b2e1e"/>
+    </g>
+    <g>
+      <circle cx="18" cy="72" r="4" fill="#3ECF8E"/>
+      <rect x="30" y="68" width="48" height="8" rx="4" fill="#4a4a4a"/>
+      <rect x="110" y="65" width="26" height="14" rx="7" fill="#3ECF8E"/>
+      <circle cx="129" cy="72" r="5" fill="#0b2e1e"/>
+    </g>
+    <g>
+      <circle cx="18" cy="100" r="4" fill="#6b6b6b"/>
+      <rect x="30" y="96" width="70" height="8" rx="4" fill="#4a4a4a"/>
+      <rect x="110" y="93" width="26" height="14" rx="7" fill="#3a3a3a"/>
+      <circle cx="117" cy="100" r="5" fill="#8a8a8a"/>
+    </g>
+  </g>
+
+  <!-- title -->
+  <text x="410" y="100" fill="#ededed" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="40" font-weight="600">Supabase Manager</text>
+  <text x="410" y="136" fill="#a0a0a0" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18">Run and manage all your Supabase environments</text>
+  <text x="410" y="160" fill="#a0a0a0" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18">from one simple panel.</text>
+</svg>

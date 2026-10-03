@@ -4,6 +4,7 @@ import {
   Code2,
   Database,
   ExternalLink,
+  HardDrive,
   Home,
   PanelLeftDashed,
   ScrollText,
@@ -54,30 +55,57 @@ interface RailItem {
 const itemClass =
   'flex h-8 w-full items-center gap-2 overflow-hidden rounded-md px-1.5 py-2 text-left text-sm text-foreground-lighter outline-hidden ring-sidebar-ring transition-[width,height,padding] focus-visible:ring-2 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-5 [&>svg]:shrink-0'
 
-/**
- * Project navigation, modelled on Studio's sidebar: 3rem of icons that grows to 13rem. In
- * "expand on hover" mode it opens over the page; in "expanded" mode it takes the space.
- */
+/** Project navigation. */
 export function IconRail({ slug, studioUrl }: { slug: string; studioUrl?: string }) {
   const base = `/projects/${slug}`
+  return (
+    <Rail
+      groups={[
+        [
+          { to: base, label: 'Project Overview', icon: Home, end: true },
+          ...(studioUrl ? [{ to: studioUrl, label: 'Table & SQL Editor', icon: Table2, external: true }] : []),
+        ],
+        [
+          { to: `${base}/database`, label: 'Database', icon: Database },
+          { to: `${base}/auth`, label: 'Authentication', icon: Users },
+          { to: `${base}/functions`, label: 'Edge Functions', icon: Code2 },
+        ],
+        [{ to: `${base}/logs`, label: 'Logs', icon: ScrollText }],
+        [{ to: `${base}/settings`, label: 'Project Settings', icon: Settings }],
+      ]}
+    />
+  )
+}
+
+/** Navigation outside a project: the projects list and the manager-wide admin pages. */
+export function AppRail({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <Rail
+      groups={[
+        [{ to: '/projects', label: 'Projects', icon: Home, end: true }],
+        ...(isAdmin
+          ? [
+              [
+                { to: '/settings/users', label: 'Team', icon: Users },
+                { to: '/settings/storage', label: 'Containers & Volumes', icon: HardDrive },
+              ],
+              [{ to: '/settings/system', label: 'System Settings', icon: Settings }],
+            ]
+          : []),
+      ]}
+    />
+  )
+}
+
+/**
+ * Modelled on Studio's sidebar: 3rem of icons that grows to 13rem. In "expand on hover" mode it
+ * opens over the page; in "expanded" mode it takes the space.
+ */
+function Rail({ groups }: { groups: RailItem[][] }) {
   const [behavior, setBehavior] = useSidebarBehavior()
   const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const leaveTimer = useRef<number | undefined>(undefined)
-
-  const groups: RailItem[][] = [
-    [
-      { to: base, label: 'Project Overview', icon: Home, end: true },
-      ...(studioUrl ? [{ to: studioUrl, label: 'Table & SQL Editor', icon: Table2, external: true }] : []),
-    ],
-    [
-      { to: `${base}/database`, label: 'Database', icon: Database },
-      { to: `${base}/auth`, label: 'Authentication', icon: Users },
-      { to: `${base}/functions`, label: 'Edge Functions', icon: Code2 },
-    ],
-    [{ to: `${base}/logs`, label: 'Logs', icon: ScrollText }],
-    [{ to: `${base}/settings`, label: 'Project Settings', icon: Settings }],
-  ]
 
   const open = behavior === 'open' || (behavior === 'expandable' && (hovered || menuOpen))
   const collapsed = !open

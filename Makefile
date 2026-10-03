@@ -10,7 +10,8 @@
 	docker-users docker-user docker-passwd docker-import-local docker-backup \
 	compose-up compose-down \
 	k8s-apply \
-	version bump-patch bump-minor bump-major release-patch release-minor release-major release
+	version bump-patch bump-minor bump-major release-patch release-minor release-major release \
+	release-next next
 
 GO_MODULES_SCRIPT := ./script/go-modules.sh
 UPGRADE_GO_SCRIPT := ./script/upgrade-go.sh
@@ -89,6 +90,7 @@ help:
 	@echo "Versioning (git tags $(SERVICE)/vX.Y.Z, images :X.Y.Z and :latest):"
 	@echo "  make version                          Current release version"
 	@echo "  make release-patch|minor|major        Bump, tag, build + push the image, push the git tag"
+	@echo "  make release next                     update, fix, tidy, vet, lint, commit, then release-patch"
 	@echo "  make release V=1.4.0                  Same with an explicit version"
 	@echo "  make bump-patch|minor|major           Bump and push the git tag only (no image)"
 	@echo ""
@@ -252,10 +254,38 @@ bump-patch bump-minor bump-major:
 release-patch release-minor release-major:
 	@$(DOCKER_ENV) ./script/release.sh $(subst release-,,$@) $(service)
 
-# make release V=1.4.0
+# make release V=1.4.0 | make release next
 release:
-	@test -n "$(V)" || (echo "Usage: make release V=X.Y.Z (or make release-patch|minor|major)" >&2; exit 1)
+ifneq ($(filter next,$(MAKECMDGOALS)),)
+	@$(MAKE) --no-print-directory release-next
+else
+	@test -n "$(V)" || (echo "Usage: make release V=X.Y.Z, make release next (or make release-patch|minor|major)" >&2; exit 1)
 	@$(DOCKER_ENV) ./script/release.sh $(V) $(service)
+endif
+
+# Only meaningful as "make release next".
+next:
+	@:
+
+# The checks may rewrite go.mod/go.sum and sources; those changes are committed before tagging,
+# so the tree must be clean at the start to keep unrelated work out of that commit.
+release-next:
+	@if [ "$(ALLOW_DIRTY)" != "1" ] && [ -n "$$(git status --porcelain -- .)" ]; then \
+		echo "Error: uncommitted changes; commit them before 'make release next' (or ALLOW_DIRTY=1)" >&2; \
+		git status --short -- . | head -n 20 >&2; exit 1; \
+	fi
+	@echo "==> Pre-release checks: update, fix, tidy, vet, lint"
+	@$(MAKE) --no-print-directory update
+	@$(MAKE) --no-print-directory fix
+	@$(MAKE) --no-print-directory tidy
+	@$(MAKE) --no-print-directory vet
+	@$(MAKE) --no-print-directory lint
+	@if [ "$(ALLOW_DIRTY)" != "1" ] && [ -n "$$(git status --porcelain -- .)" ]; then \
+		echo "==> Committing changes from the pre-release checks"; \
+		git status --short -- .; \
+		git add -A -- . && git commit -q -m "chore(release): update dependencies and apply go fix"; \
+	fi
+	@$(DOCKER_ENV) ./script/release.sh patch $(service)
 
 # ==============================================================================
 # CONTAINER OPERATIONS

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Check, ChevronsUpDown, ExternalLink, HardDrive, LogOut, Moon, Plus, Settings2, Sun, Users } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { Logo } from '@/components/logo'
@@ -85,11 +85,19 @@ function ProjectSwitcher({ current }: { current: Project }) {
   )
 }
 
+const sections = [
+  { prefix: '/settings/users', label: 'Team' },
+  { prefix: '/settings/storage', label: 'Containers & Volumes' },
+  { prefix: '/settings/system', label: 'System Settings' },
+]
+
 export function TopBar({ project, studioUrl }: { project?: Project; studioUrl?: string }) {
   const { user, isAdmin, logout } = useAuth()
   const { resolvedTheme, setTheme } = useTheme()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const initials = (user?.name || user?.email || '?').slice(0, 2).toUpperCase()
+  const section = project ? undefined : sections.find((s) => pathname.startsWith(s.prefix))
 
   return (
     <header className="bg-sidebar flex h-12 shrink-0 items-center gap-2 border-b px-3">
@@ -98,7 +106,7 @@ export function TopBar({ project, studioUrl }: { project?: Project; studioUrl?: 
       </Link>
       <span className="text-muted-foreground/50 text-lg">/</span>
       <Button variant="ghost" size="sm" className="px-2 font-normal" asChild>
-        <Link to="/projects">Projects</Link>
+        <Link to={section?.prefix ?? '/projects'}>{section?.label ?? 'Projects'}</Link>
       </Button>
       {project && (
         <>
